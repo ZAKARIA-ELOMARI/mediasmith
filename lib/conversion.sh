@@ -207,7 +207,7 @@ show_progress() {
 #############################################
 convert_file() {
   local src="$1"
-  local out_dir base name ext_in out_path cmd
+  local out_dir base name ext_in out_path type cmd
 
   if [[ ! -f "$src" ]]; then
     log_error "Le fichier n'existe pas: $src"
@@ -225,6 +225,7 @@ convert_file() {
 
   case "$ext_in" in
     mp3|wav|flac|aac|ogg)
+      type="audios"
       if [[ "$OPT_CUSTOM_AUDIO_EXT" -eq 1 ]]; then
         out_ext="$CUSTOM_AUDIO_EXT"
       else
@@ -232,6 +233,7 @@ convert_file() {
       fi
       ;;
     mp4|mkv|avi|mov|flv|wmv)
+      type="videos"
       if [[ "$OPT_CUSTOM_VIDEO_EXT" -eq 1 ]]; then
         out_ext="$CUSTOM_VIDEO_EXT"
       else
@@ -239,6 +241,7 @@ convert_file() {
       fi
       ;;
     png|jpg|jpeg|gif|bmp|tiff|webp)
+      type="images"
       if [[ "$OPT_CUSTOM_IMAGE_EXT" -eq 1 ]]; then
         out_ext="$CUSTOM_IMAGE_EXT"
       else
@@ -251,8 +254,8 @@ convert_file() {
       ;;
   esac
 
-  ensure_dir "$out_dir"
-  out_path="$out_dir/${name}.${out_ext}"
+  ensure_dir "$out_dir/$type"
+  out_path="$out_dir/$type/${name}.${out_ext}"
 
   if [[ "$(realpath "$src")" == "$(realpath "$out_path")" ]]; then
     log_error "Le fichier source et de destination sont identiques : $src"
