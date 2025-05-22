@@ -14,6 +14,8 @@ source "$PROJECT_ROOT/config/config.cfg"
 source "$PROJECT_ROOT/lib/logging.sh"
 source "$PROJECT_ROOT/lib/utils.sh"
 
+init_logging > /dev/null 2>&1
+
 #######################################
 # OPTIONS FLAGS
 #######################################
@@ -25,6 +27,7 @@ OPT_CUSTOM_IMAGE_EXT=0
 #######################################
 # OPTIONS VALUES
 #######################################
+SOURCE=""
 CUSTOM_OUT_DIR=""
 CUSTOM_AUDIO_EXT=""
 CUSTOM_VIDEO_EXT=""
@@ -199,10 +202,9 @@ show_progress() {
   return "$status"
 }
 
-#######################################
-# convert_file <source_file> <out_ext> [<out_dir>]
-#   Convertit un fichier audio, vidéo ou image
-#######################################
+#############################################
+# Convertit un fichier audio, vidéo ou image
+#############################################
 convert_file() {
   local src="$1"
   local out_dir base name ext_in out_path cmd
@@ -347,7 +349,7 @@ show_help() {
     cat <<EOF
 Convertisseur multimédia v1.1
 
-Usage : "$0" [-options] <fichier_source>
+Usage : "$0" [-h | -r] <fichier_source> [-o] <out_dir> [-v | -a | -i] <ext>
 
 Tu peux changer le répertoire de sortie et l'extension en modifiant config.cfg
 
@@ -376,53 +378,69 @@ EOF
 # Parse options
 #######################################
 parse_options() {
-  OPTIND=1
-  while getopts ":hro:v:a:i:" opt; do
-    case "$opt" in
-      h)
-        show_help
-        exit 0
-        ;;
-      o)
-        OPT_OUT_DIR=1
-        CUSTOM_OUT_DIR="$OPTARG"
-        echo "DEBUG: OPT_OUT_DIR=1"
-        echo "DEBUG: CUSTOM_OUT_DIR=$CUSTOM_OUT_DIR"
-        ;;
-      r)
-        OPT_RECURSIVE=1
-        ;;
-      v)
-        OPT_CUSTOM_VIDEO_EXT=1
-        CUSTOM_VIDEO_EXT="${OPTARG#.}"
-        ;;
-      a)
-        OPT_CUSTOM_AUDIO_EXT=1
-        CUSTOM_AUDIO_EXT="${OPTARG#.}"
-        ;;
-      i)
-        OPT_CUSTOM_IMAGE_EXT=1
-        CUSTOM_IMAGE_EXT="${OPTARG#.}"
-        ;;
-      \?)
-        log_error "Option invalide : -$OPTARG"
-        show_help
-        exit 1
-        ;;
-      :)
-        log_error "Option -$OPTARG requiert un argument"
-        show_help
-        exit 1
-        ;;
+  #parse -h and -r because they come before the source
+  while [[ ${1-} == -* ]]; do
+    case "$1" in
+        -r)
+            OPT_RECURSIVE=1
+            shift
+            ;;
+        -h)
+            show_help
+            exit 0
+            ;;
+        -*)
+            log_error "Option invalide : $1"
+            exit 1
+            ;;
     esac
   done
-  shift $((OPTIND - 1))
 
-  if [[ "$#" -eq 0 ]]; then
+  if [[ -z ${1-} ]]; then
     log_error "Erreur : pas de fichier ni de dossier spécifié"
-    show_help
     exit 1
+  elif [[ ! -e "$1" ]]; then
+    log_error "Le fichier/dossier source n'existe pas : $1"
+    exit 1
+  else
+    SOURCE="$1"
+    shift
   fi
+
+  # if there is more options to parse
+  if [[ "$#" -gt 0 ]]; then
+    while getopts ":o:v:a:i:" opt; do
+      case "$opt" in
+        o)
+          OPT_OUT_DIR=1
+          CUSTOM_OUT_DIR="$OPTARG"
+          ;;
+        v)
+          OPT_CUSTOM_VIDEO_EXT=1
+          CUSTOM_VIDEO_EXT="${OPTARG#.}"
+          ;;
+        a)
+          OPT_CUSTOM_AUDIO_EXT=1
+          CUSTOM_AUDIO_EXT="${OPTARG#.}"
+          ;;
+        i)
+          OPT_CUSTOM_IMAGE_EXT=1
+          CUSTOM_IMAGE_EXT="${OPTARG#.}"
+          ;;
+        \?)
+          log_error "Option invalide : -$OPTARG"
+          show_help
+          exit 1
+          ;;
+        :)
+          log_error "Option -$OPTARG requiert un argument"
+          show_help
+          exit 1
+          ;;
+      esac
+    done
+  fi
+  shift $((OPTIND - 1))
 
   if [[ $OPT_CUSTOM_VIDEO_EXT -eq 1 ]]; then
     case "$CUSTOM_VIDEO_EXT" in
@@ -471,19 +489,24 @@ parse_options() {
       exit 1
     fi
   fi
-
-  echo "CUSTOM_OUT_DIR = $CUSTOM_OUT_DIR"
-  echo "CUSTOM_VIDEO_EXT = $CUSTOM_VIDEO_EXT"
-  echo "CUSTOM_AUDIO_EXT = $CUSTOM_AUDIO_EXT"
-  echo "CUSTOM_IMAGE_EXT = $CUSTOM_IMAGE_EXT"
-  echo "FILES = $@"
+  log_debug """
+  SOURCE=$SOURCE
+  OPT_OUT_DIR=$OPT_OUT_DIR
+  CUSTOM_OUT_DIR=$CUSTOM_OUT_DIR
+  OPT_CUSTOM_VIDEO_EXT=$OPT_CUSTOM_VIDEO_EXT
+  CUSTOM_VIDEO_EXT=$CUSTOM_VIDEO_EXT
+  OPT_CUSTOM_AUDIO_EXT=$OPT_CUSTOM_AUDIO_EXT
+  CUSTOM_AUDIO_EXT=$CUSTOM_AUDIO_EXT
+  OPT_CUSTOM_IMAGE_EXT=$OPT_CUSTOM_IMAGE_EXT
+  CUSTOM_IMAGE_EXT=$CUSTOM_IMAGE_EXT
+  """
 }
 
 #######################################
 # Fonction principale
 #######################################
 main() {
-  # Vérifier options
+  # Vérifier args
   if [[ $# -eq 0 ]]; then
     show_help
     exit 0
@@ -491,64 +514,19 @@ main() {
 
   parse_options "$@"
   shift $((OPTIND - 1))
-  # Initialiser la journalisation
-  init_logging
 
   # Vérifier dépendances
   check_command ffmpeg
   check_command convert
 
-  
-  local src="$1"
-
-  if [[ ! -e "$src" ]]; then
-    log_error "Le fichier/dossier source n'existe pas : $src"
+  if [[ -d "$SOURCE" ]]; then
+    convert_folder "$SOURCE"
+  elif [[ -f "$SOURCE" ]]; then
+    convert_file "$SOURCE"
+  else
+    log_error "Le fichier/dossier source n'existe pas : $SOURCE"
     exit 1
   fi
-
-  if [[ -d "$src" ]]; then
-    convert_folder "$src"
-  else
-    convert_file "$src"
-  fi
-
-  # local recursive=0
-  # local args=()
-  # while [[ "$#" -gt 0 ]]; do
-  #   case "$1" in
-  #     -r)
-  #       recursive=1
-  #       shift
-  #       ;;
-  #     *)
-  #       args+=("$1")
-  #     shift
-  #     ;;
-  #   esac
-  # done
-
-  # if [[ "${#args[@]}" -eq 0 ]]; then
-  #   echo "Erreur : pas de fichier ni de dossier spécifié" >&2
-  #   exit 1
-  # fi
-
-  # local src="${args[0]}"
-
-  # if [[ -d "$src" ]]; then
-  #   if [[ "$recursive" -eq 1 ]]; then
-  #     convert_folder -r "$src"
-  #   else
-  #     convert_folder "$src"
-  #   fi
-  # else
-  #   convert_file "$src"
-  # fi
-
-
-
-
-
-
 }
 
 # if sourced

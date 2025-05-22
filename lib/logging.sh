@@ -83,8 +83,9 @@ log_warn() {
 #######################################
 log_error() {
   local ts
+  local message
   ts=$(get_timestamp)
-  local message="[ERROR] $ts — $*"
+  message="[ERROR] $ts — $*"
   echo "$message" >&2
   echo "$message" >> "$LOG_FILE"
 }
