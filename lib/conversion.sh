@@ -15,6 +15,22 @@ source "$PROJECT_ROOT/lib/logging.sh"
 source "$PROJECT_ROOT/lib/utils.sh"
 
 #######################################
+# OPTIONS FLAGS
+#######################################
+OPT_RECURSIVE=0
+OPT_OUT_DIR=0
+OPT_CUSTOM_AUDIO_EXT=0
+OPT_CUSTOM_VIDEO_EXT=0
+OPT_CUSTOM_IMAGE_EXT=0
+#######################################
+# OPTIONS VALUES
+#######################################
+CUSTOM_OUT_DIR=""
+CUSTOM_AUDIO_EXT=""
+CUSTOM_VIDEO_EXT=""
+CUSTOM_IMAGE_EXT=""
+
+#######################################
 # ext_lower <filename> : renvoie l'extension en minuscules (sans le point)
 #######################################
 ext_lower() {
@@ -189,15 +205,16 @@ show_progress() {
 #######################################
 convert_file() {
   local src="$1"
-  # local out_ext="${2#.}"
-  # local out_dir = "${$2:-$OUT_DIR}"
-  local out_dir="$OUT_DIR"
-  local base name ext_in out_path cmd
+  local out_dir base name ext_in out_path cmd
 
-  # Vérifier que le fichier source existe
   if [[ ! -f "$src" ]]; then
-    log_error "Le fichier source n'existe pas : $src"
-    return 1
+    log_error "Le fichier n'existe pas: $src"
+  fi
+
+  if [[ "$OPT_OUT_DIR" -eq 1 ]]; then
+    out_dir="$CUSTOM_OUT_DIR"
+  else
+    out_dir="$DEFAULT_OUT_DIR"
   fi
 
   base="$(basename "$src")"
@@ -206,25 +223,35 @@ convert_file() {
 
   case "$ext_in" in
     mp3|wav|flac|aac|ogg)
-      out_ext="$audio_ext"
-      ;;      
+      if [[ "$OPT_CUSTOM_AUDIO_EXT" -eq 1 ]]; then
+        out_ext="$CUSTOM_AUDIO_EXT"
+      else
+        out_ext="$default_audio_ext"
+      fi
+      ;;
     mp4|mkv|avi|mov|flv|wmv)
-      out_ext="$video_ext"
-      ;;      
+      if [[ "$OPT_CUSTOM_VIDEO_EXT" -eq 1 ]]; then
+        out_ext="$CUSTOM_VIDEO_EXT"
+      else
+        out_ext="$default_video_ext"
+      fi
+      ;;
     png|jpg|jpeg|gif|bmp|tiff|webp)
-      out_ext="$image_ext"
-      ;;      
+      if [[ "$OPT_CUSTOM_IMAGE_EXT" -eq 1 ]]; then
+        out_ext="$CUSTOM_IMAGE_EXT"
+      else
+        out_ext="$default_image_ext"
+      fi
+      ;;
     *)
       log_error "Type non supporté : .$ext_in (fichier $src)"
       return 1
       ;;
   esac
 
-
   ensure_dir "$out_dir"
   out_path="$out_dir/${name}.${out_ext}"
 
-  # Eviter d'écraser le fichier source
   if [[ "$(realpath "$src")" == "$(realpath "$out_path")" ]]; then
     log_error "Le fichier source et de destination sont identiques : $src"
     return 1
@@ -287,34 +314,24 @@ convert_file() {
 }
 
 convert_folder() {
-  local recursive=0
-
-  # Parse options for convert_folder
-  while getopts ":r" opt; do
-    case "$opt" in
-      r)
-        recursive=1
-        ;;
-      \?)
-        log_error "Option invalide : -$OPTARG"
-        return 1
-        ;;
-    esac
-  done
-  shift $((OPTIND - 1))
-  echo $1
   local src_dir="$1"
+  local out_dir
 
-  ensure_dir "$OUT_DIR"
+  if [[ "$OPT_OUT_DIR" -eq 1 ]]; then
+    out_dir="$CUSTOM_OUT_DIR"
+  else
+    out_dir="$DEFAULT_OUT_DIR"
+  fi
+  
+  ensure_dir "$out_dir"
 
-  if [[ "$recursive" -eq 1 ]]; then
-    # Recursive conversion: find all files under src_dir
+  if [[ "$OPT_RECURSIVE" -eq 1 ]]; then
+    #recursive conversion -r:
     while IFS= read -r -d '' file; do
-      echo "DEBUG: convert_file called with: '$file'"
       convert_file "$file"
     done < <(find "$src_dir" -type f -print0)
   else
-    # Non-recursive: only files in the top directory
+    #non recursive conversion
     shopt -s nullglob
     for file in "$src_dir"/*.*; do
       [[ -f "$file" ]] && convert_file "$file"
@@ -323,45 +340,143 @@ convert_folder() {
   fi
 }
 
-
-# convert_folder(){
-#   local src_dir="$1"
-#   local out_dir="$OUT_DIR"
-
-#   ensure_dir "$out_dir"
-
-#   shopt -s nullglob
-#   for src in "$src_dir"/*.*; do
-#     if [[ -f "$src" ]]; then
-#       convert_file "$src"
-#     fi
-#   done
-#   shopt -u nullglob
-# }
-
 #######################################
 # Affiche l'aide
 #######################################
 show_help() {
-  cat <<EOF
+    cat <<EOF
 Convertisseur multimédia v1.1
-Usage : $0 <fichier_source>
 
-Tu peux changer le repertoire de sortie et l'extension en modifiant config.cfg
+Usage : "$0" [-options] <fichier_source>
+
+Tu peux changer le répertoire de sortie et l'extension en modifiant config.cfg
 
 Options:
-  -h, --help    Affiche cette aide
-
+  -h, Affiche cette aide
+  -o, Spécifie le répertoire de sortie
+  -r, Convertit tous les fichiers dans le dossier et ses sous-dossiers
+  -v, Spécifie l'extension vidéo
+  -a, Spécifie l'extension audio
+  -i, Spécifie l'extension image
 Formats supportés:
   - Audio : mp3, wav, flac, aac, ogg
   - Vidéo : mp4, mkv, avi, mov, flv, wmv
   - Image : png, jpg, jpeg, gif, bmp, tiff, webp
 
 Exemple :
-  $0 video.mkv ./output    # Convertit video.mkv en $video_ext
-  $0 image.png ./output     # Convertit image.png en $image_ext
-  $0 audio.ogg ./output     # Convertit audio.ogg en $audio_ext
+  "$0" video.mkv ./output    # Convertit video.mkv en $default_video_ext
+  "$0" image.png ./output    # Convertit image.png en $default_image_ext
+  "$0" audio.ogg ./output    # Convertit audio.ogg en $default_audio_ext
+
 EOF
+}
+
+
+#######################################
+# Parse options
+#######################################
+parse_options() {
+  OPTIND=1
+  while getopts ":hro:v:a:i:" opt; do
+    case "$opt" in
+      h)
+        show_help
+        exit 0
+        ;;
+      o)
+        OPT_OUT_DIR=1
+        CUSTOM_OUT_DIR="$OPTARG"
+        echo "DEBUG: OPT_OUT_DIR=1"
+        echo "DEBUG: CUSTOM_OUT_DIR=$CUSTOM_OUT_DIR"
+        ;;
+      r)
+        OPT_RECURSIVE=1
+        ;;
+      v)
+        OPT_CUSTOM_VIDEO_EXT=1
+        CUSTOM_VIDEO_EXT="${OPTARG#.}"
+        ;;
+      a)
+        OPT_CUSTOM_AUDIO_EXT=1
+        CUSTOM_AUDIO_EXT="${OPTARG#.}"
+        ;;
+      i)
+        OPT_CUSTOM_IMAGE_EXT=1
+        CUSTOM_IMAGE_EXT="${OPTARG#.}"
+        ;;
+      \?)
+        log_error "Option invalide : -$OPTARG"
+        show_help
+        exit 1
+        ;;
+      :)
+        log_error "Option -$OPTARG requiert un argument"
+        show_help
+        exit 1
+        ;;
+    esac
+  done
+  shift $((OPTIND - 1))
+
+  if [[ "$#" -eq 0 ]]; then
+    log_error "Erreur : pas de fichier ni de dossier spécifié"
+    show_help
+    exit 1
+  fi
+
+  if [[ $OPT_CUSTOM_VIDEO_EXT -eq 1 ]]; then
+    case "$CUSTOM_VIDEO_EXT" in
+      mp4|mkv|avi|mov|flv|wmv)
+        ;;
+      *)
+        log_error "Extension vidéo invalide : $CUSTOM_VIDEO_EXT"
+        log_error "Supported file extensions: mp4|mkv|avi|mov|flv|wmv"
+        exit 1
+        ;;
+    esac
+  fi
+
+  if [[ $OPT_CUSTOM_IMAGE_EXT -eq 1 ]]; then
+    case "$CUSTOM_IMAGE_EXT" in
+      png|jpg|jpeg|gif|bmp|tiff|webp)
+        ;;
+      *)
+        log_error "Extension image invalide : $CUSTOM_IMAGE_EXT"
+        log_error "Supported file extensions: png|jpg|jpeg|gif|bmp|tiff|webp"
+        exit 1
+        ;;
+    esac
+  fi
+
+  if [[ $OPT_CUSTOM_AUDIO_EXT -eq 1 ]]; then
+    case "$CUSTOM_AUDIO_EXT" in
+      mp3|wav|flac|aac|ogg)
+        ;;
+      *)
+        log_error "Extension audio invalide : $CUSTOM_AUDIO_EXT"
+        log_error "Supported file extensions: mp3|wav|flac|aac|ogg"
+        exit 1
+        ;;
+    esac
+  fi
+
+  if [[ $OPT_OUT_DIR -eq 1 ]]; then
+    if [[ -z "$CUSTOM_OUT_DIR" ]]; then
+      log_error "Erreur : dossier de sortie non spécifié"
+      show_help
+      exit 1
+    fi
+    if ! ensure_dir "$CUSTOM_OUT_DIR"; then
+      log_error "Impossible de créer le dossier de sortie : $CUSTOM_OUT_DIR"
+      exit 1
+    fi
+  fi
+
+  echo "CUSTOM_OUT_DIR = $CUSTOM_OUT_DIR"
+  echo "CUSTOM_VIDEO_EXT = $CUSTOM_VIDEO_EXT"
+  echo "CUSTOM_AUDIO_EXT = $CUSTOM_AUDIO_EXT"
+  echo "CUSTOM_IMAGE_EXT = $CUSTOM_IMAGE_EXT"
+  echo "FILES = $@"
 }
 
 #######################################
@@ -369,11 +484,13 @@ EOF
 #######################################
 main() {
   # Vérifier options
-  if [[ $# -eq 0 || ("$1" == "-h" || "$1" == "--help") ]]; then
+  if [[ $# -eq 0 ]]; then
     show_help
     exit 0
   fi
 
+  parse_options "$@"
+  shift $((OPTIND - 1))
   # Initialiser la journalisation
   init_logging
 
@@ -381,44 +498,57 @@ main() {
   check_command ffmpeg
   check_command convert
 
-  # Vérifier les arguments
-  if [[ $# -lt 1 ]]; then
-    log_error "Arguments insuffisants"
-    show_help
+  
+  local src="$1"
+
+  if [[ ! -e "$src" ]]; then
+    log_error "Le fichier/dossier source n'existe pas : $src"
     exit 1
   fi
-
-  local recursive=0
-  local args=()
-  while [[ "$#" -gt 0 ]]; do
-    case "$1" in
-      -r)
-        recursive=1
-        shift
-        ;;
-      *)
-        args+=("$1")
-      shift
-      ;;
-    esac
-  done
-
-  if [[ "${#args[@]}" -eq 0 ]]; then
-    echo "Erreur : pas de fichier ni de dossier spécifié" >&2
-    exit 1
-  fi
-
-  local src="${args[0]}"
 
   if [[ -d "$src" ]]; then
-    if [[ "$recursive" -eq 1 ]]; then
-      convert_folder -r "$src"
-    else
-      convert_folder "$src"
-    fi
+    convert_folder "$src"
   else
     convert_file "$src"
   fi
+
+  # local recursive=0
+  # local args=()
+  # while [[ "$#" -gt 0 ]]; do
+  #   case "$1" in
+  #     -r)
+  #       recursive=1
+  #       shift
+  #       ;;
+  #     *)
+  #       args+=("$1")
+  #     shift
+  #     ;;
+  #   esac
+  # done
+
+  # if [[ "${#args[@]}" -eq 0 ]]; then
+  #   echo "Erreur : pas de fichier ni de dossier spécifié" >&2
+  #   exit 1
+  # fi
+
+  # local src="${args[0]}"
+
+  # if [[ -d "$src" ]]; then
+  #   if [[ "$recursive" -eq 1 ]]; then
+  #     convert_folder -r "$src"
+  #   else
+  #     convert_folder "$src"
+  #   fi
+  # else
+  #   convert_file "$src"
+  # fi
+
+
+
+
+
+
 }
 
 # if sourced
