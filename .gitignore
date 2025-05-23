@@ -1,3 +1,5 @@
 logs
 files
 out
+backup/
+nohup.out

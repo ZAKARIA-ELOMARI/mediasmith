@@ -17,23 +17,6 @@ source "$PROJECT_ROOT/lib/utils.sh"
 init_logging > /dev/null 2>&1
 
 #######################################
-# OPTIONS FLAGS
-#######################################
-OPT_RECURSIVE=0
-OPT_OUT_DIR=0
-OPT_CUSTOM_AUDIO_EXT=0
-OPT_CUSTOM_VIDEO_EXT=0
-OPT_CUSTOM_IMAGE_EXT=0
-#######################################
-# OPTIONS VALUES
-#######################################
-SOURCE=""
-CUSTOM_OUT_DIR=""
-CUSTOM_AUDIO_EXT=""
-CUSTOM_VIDEO_EXT=""
-CUSTOM_IMAGE_EXT=""
-
-#######################################
 # ext_lower <filename> : renvoie l'extension en minuscules (sans le point)
 #######################################
 ext_lower() {
@@ -41,6 +24,14 @@ ext_lower() {
   echo "${filename##*.}" | tr '[:upper:]' '[:lower:]'
 }
 
+#######################################
+# keep state of converted_files
+#######################################
+log_to_convert() {
+  if ! grep -Fxq "$1" "$CONVERTED_FILES_LOG"; then
+    echo "$1" >> "$CONVERTED_FILES_LOG"
+  fi
+}
 #######################################
 # SHOW PROGRESS - AVEC POURCENTAGE
 #######################################
@@ -313,7 +304,7 @@ convert_file() {
     log_error "Le fichier de sortie n'a pas été créé : $out_path"
     return 1
   fi
-  
+  log_to_convert "$base"
   log_info "Conversion réussie : $(du -h "$out_path" | cut -f1)"
   return 0
 }
@@ -508,7 +499,7 @@ parse_options() {
 #######################################
 # Fonction principale
 #######################################
-main() {
+convert_main() {
   # Vérifier args
   if [[ $# -eq 0 ]]; then
     show_help
@@ -530,6 +521,10 @@ main() {
     log_error "Le fichier/dossier source n'existe pas : $SOURCE"
     exit 1
   fi
+}
+
+main(){
+  convert_main "$@"
 }
 
 # if sourced

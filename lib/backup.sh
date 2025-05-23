@@ -1,72 +1,55 @@
 #!/usr/bin/env bash
-# lib/backup.sh - fonctions de sauvegarde des fichiers originaux avec horodatage
 
 set -euo pipefail
 
-# --- Chargement des dépendances ---
+#######################################
+# Détermine le chemin du script et du projet
+#######################################
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# utils.sh fournit ensure_dir() et timestamp()
-# logging.sh fournit log_info() et log_error()
-source "$SCRIPT_DIR/utils.sh"
-source "$SCRIPT_DIR/logging.sh"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Variables exportées après init_backup :
-#   BACKUP_TS        = horodatage (YYYYMMDD-HHMMSS)
-#   BACKUP_DIR_TS    = chemin complet vers le dossier de backup horodaté
+# Chargement du module de journalisation et config
+source "$PROJECT_ROOT/config/config.cfg"
+source "$PROJECT_ROOT/lib/logging.sh"
+source "$PROJECT_ROOT/lib/utils.sh"
 
-# init_backup <backup_root>
-#   Initialise une nouvelle session de sauvegarde :
-#   - crée <backup_root>/<timestamp>/
-#   - définit BACKUP_TS et BACKUP_DIR_TS
-init_backup() {
-  local backup_root="$1"
-  if [ -z "$backup_root" ]; then
-    log_error "init_backup: répertoire de backup non spécifié"
-    exit 1
-  fi
+init_logging > /dev/null 2>&1
 
-  BACKUP_TS="$(timestamp)"
-  BACKUP_DIR_TS="$backup_root/$BACKUP_TS"
-  ensure_dir "$BACKUP_DIR_TS"
-  log_info "Sauvegarde initialisée : $BACKUP_DIR_TS"
+ensure_dir "$BACKUP_DIR"
+touch "$TO_BACKUP"
+touch "$BACKED_UP"
+
+# === BACKUP PROCESS ===
+backup_process() {
+    TODAY_DIR="$BACKUP_DIR/$(date +%F)"
+    ensure_dir "$TODAY_DIR"
+    while IFS= read -r FILE; do
+        [ ! -f "$FILE" ] && continue  # skip if file no longer exists
+
+        # Skip if already backed up
+        if grep -Fxq "$FILE" "$BACKED_UP"; then
+            continue
+        fi
+
+        TYPE=$(get_type "$FILE")
+
+        if [ "$TYPE" = "unknown" ]; then
+            log_info "Unknown file type: $FILE"
+            continue
+        fi
+
+        BASENAME=$(basename "$FILE")
+        ensure_dir "$TODAY_DIR/$TYPE"
+        cp "$FILE" "$TODAY_DIR/$TYPE"
+        if command -v rclone &> /dev/null; then
+            rclone copy "$FILE" "$REMOTE_DIR/$TODAY_DIR/$TYPE"
+            log_info "Backed up $FILE to $REMOTE_DIR/$TODAY_DIR/$TYPE"
+        fi
+        log_info "Backed up $FILE to $TODAY_DIR/$TYPE"
+
+        echo "$FILE" >> "$BACKED_UP"
+    done < "$TO_BACKUP"
+    > "$TO_BACKUP"
 }
 
-# backup_file <file_path> <source_root>
-#   Copie <file_path> dans BACKUP_DIR_TS en reproduisant l'arborescence relative
-backup_file() {
-  local src="$1"
-  local src_root="$2"
-  if [ -z "${BACKUP_DIR_TS-}" ]; then
-    log_error "backup_file: vous devez appeler init_backup avant"
-    exit 1
-  fi
-  if [ ! -f "$src" ]; then
-    log_error "backup_file: fichier introuvable : $src"
-    return 1
-  fi
-  # chemin relatif
-  local rel="${src#$src_root/}"
-  local dst_dir="$BACKUP_DIR_TS/$(dirname "$rel")"
-  ensure_dir "$dst_dir"
-  cp -p "$src" "$dst_dir/"
-  log_info "Sauvegardé : $src -> $dst_dir/"
-}
-
-# backup_directory <dir_path> <source_root>
-#   Parcourt récursivement et sauvegarde tous les fichiers réguliers
-backup_directory() {
-  local dir="$1"
-  local src_root="$2"
-  if [ ! -d "$dir" ]; then
-    log_error "backup_directory: répertoire introuvable : $dir"
-    return 1
-  fi
-  while IFS= read -r -d '' file; do
-    backup_file "$file" "$src_root"
-  done < <(find "$dir" -type f -print0)
-}
-
-# Exemple d'utilisation :
-#   init_backup "/path/to/backup"
-#   backup_file "/path/to/source/file.mp4" "/path/to/source"
-#   backup_directory "/path/to/source/subdir" "/path/to/source"
+backup_process

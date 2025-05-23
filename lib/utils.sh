@@ -12,6 +12,17 @@ ensure_dir() {
   fi
 }
 
+# === FILE TYPE CHECKING FUNCTION ===
+get_type() {
+    MIME_TYPE=$(file --mime-type -b "$1")
+    case "$MIME_TYPE" in
+        image/*) echo "images" ;;
+        video/*) echo "videos" ;;
+        audio/*) echo "audios" ;;
+        *) echo "unknown" ;;
+    esac
+}
+
 # --- Vérification de commandes ---
 # check_command <cmd> : quitte si la commande n'est pas trouvée
 check_command() {
