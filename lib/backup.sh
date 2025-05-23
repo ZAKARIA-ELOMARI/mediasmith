@@ -41,14 +41,17 @@ backup_process() {
         BASENAME=$(basename "$FILE")
         ensure_dir "$TODAY_DIR/$TYPE"
         cp "$FILE" "$TODAY_DIR/$TYPE"
-        if command -v rclone &> /dev/null; then
-            rclone copy "$FILE" "$REMOTE_DIR/$TODAY_DIR/$TYPE"
-            log_info "Backed up $FILE to $REMOTE_DIR/$TODAY_DIR/$TYPE"
-        fi
         log_info "Backed up $FILE to $TODAY_DIR/$TYPE"
 
         echo "$FILE" >> "$BACKED_UP"
     done < "$TO_BACKUP"
+    TIMESTAMP=$(date +%T)
+    if command -v rclone &> /dev/null; then
+        log_info "Backing up $BACKUP_DIR to remote $REMOTE_DIR/"
+        rclone mkdir "$REMOTE_DIR/$TODAY"
+        rclone copy "$BACKUP_DIR"/*/ "$REMOTE_DIR/$TODAY/$TIMESTAMP"
+        log_info "Backed up $BACKUP_DIR to remote $REMOTE_DIR/"
+    fi
     > "$TO_BACKUP"
 }
 

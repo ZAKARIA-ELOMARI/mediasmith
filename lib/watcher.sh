@@ -4,6 +4,17 @@
 set -euo pipefail
 
 #######################################
+# Usage and defaults
+#######################################
+WATCH_DIR=""
+DAEMON=false
+
+print_usage() {
+    echo "Usage: $0 [--watch-dir DIR] [--daemon]"
+    exit 1
+}
+
+#######################################
 # Détermine le chemin du script et du projet
 #######################################
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,15 +27,54 @@ source "$PROJECT_ROOT/lib/utils.sh"
 source "$PROJECT_ROOT/lib/backup.sh"
 source "$PROJECT_ROOT/lib/conversion.sh"
 
+# Respect config file unless overridden by CLI
+WATCH_DIR="${WATCH_DIR:-}"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --watch-dir|-w)
+            [[ -z "${2:-}" ]] && print_usage
+            WATCH_DIR="$2"
+            shift 2
+            ;;
+        --daemon|-d)
+            DAEMON=true
+            shift
+            ;;
+        --help|-h)
+            print_usage
+            ;;
+        *)
+            print_usage
+            ;;
+    esac
+done
+
+# If running as daemon, relaunch in background
+if $DAEMON; then
+    ARGS=()
+    [[ -n "$WATCH_DIR" ]] && ARGS+=(--watch-dir "$WATCH_DIR")
+    nohup "$0" "${ARGS[@]}" > nohup.out 2>&1 &
+    echo "Watcher running in daemon mode (PID $!)"
+    exit 0
+fi
+
 init_logging > /dev/null 2>&1
+
+# Ensure WATCH_DIR is set
+if [[ -z "$WATCH_DIR" ]]; then
+    log_error "No watch directory specified. Use --watch-dir DIR or define WATCH_DIR in config.cfg."
+    exit 1
+fi
+
+log_info "Watching $WATCH_DIR for new files..."
 
 WATCH_INTERVAL=10
 TEMP_DIR="/tmp"
 PENDING_FLAG="$TEMP_DIR/file_watcher_pending_$$"
 TIMESTAMP_FILE="$TEMP_DIR/file_watcher_timestamp_$$"
 DELETED_FILES="$TEMP_DIR/file_watcher_deleted_$$"
-
-log_info "Watching $WATCH_DIR for new files..."
 
 cleanup() {
     log_info "Cleaning up..."
@@ -38,11 +88,9 @@ trap cleanup INT TERM
 remove_from_backup_queue() {
     local file_to_remove="$1"
     local filename=$(basename "$file_to_remove")
-    
     if [[ -f "$TO_BACKUP" ]]; then
-        # Create temp file without the deleted file
         local temp_backup="$TO_BACKUP.tmp.$$"
-        grep -v "^$(printf '%s\n' "$file_to_remove" | sed 's/[[\.*^$()+?{|]/\\&/g')$" "$TO_BACKUP" > "$temp_backup" 2>/dev/null || true
+        grep -v "^$(printf '%s\n' "$file_to_remove" | sed 's/[[\.*^$()+?|]/\\&/g')$" "$TO_BACKUP" > "$temp_backup" 2>/dev/null || true
         mv "$temp_backup" "$TO_BACKUP"
         log_info "Removed $filename from backup queue"
     fi
@@ -50,8 +98,6 @@ remove_from_backup_queue() {
 
 process_changes() {
     log_info "Start processing changes..."
-    
-    # Process deleted files first
     if [[ -f "$DELETED_FILES" ]]; then
         while IFS= read -r deleted_file; do
             if [[ -n "$deleted_file" ]]; then
@@ -59,29 +105,22 @@ process_changes() {
                 remove_from_backup_queue "$deleted_file"
             fi
         done < "$DELETED_FILES"
-        > "$DELETED_FILES"  # Clear the deleted files list
+        > "$DELETED_FILES"
     fi
-    
-    # Process new/modified files
+
     find "$WATCH_DIR" -type f | while read -r file; do
         filename=$(basename "$file")
-
-        # Check if file has already been converted
         if ! grep -Fxq "$filename" "$CONVERTED_FILES_LOG"; then
             log_info "Converting $filename..."
             convert_main "$file"
             echo "$filename" >> "$CONVERTED_FILES_LOG"
-
-            # Queue file for backup
             echo "$file" >> "$TO_BACKUP"
         else
             log_debug "Already converted: $filename"
         fi
     done
 
-    # Delegate backup work to backup_process
     backup_process
-
     log_info "End processing changes."
 }
 
@@ -93,7 +132,6 @@ process_when_idle() {
             now=$(date +%s)
             diff=$(( now - last_event_time ))
             log_debug "Idle check: ${diff}s since last event"
-
             if (( diff >= WATCH_INTERVAL )); then
                 log_info "Idle threshold reached — processing..."
                 process_changes
@@ -104,11 +142,8 @@ process_when_idle() {
     done
 }
 
-# Function to handle file events
 handle_file_event() {
-    local file="$1"
-    local event="$2"
-    
+    local file="$1" event="$2"
     case "$event" in
         *DELETE*|*MOVED_FROM*)
             log_info "File deleted/moved: $(basename "$file")"
@@ -118,38 +153,33 @@ handle_file_event() {
             log_info "File created/modified/moved in: $(basename "$file")"
             ;;
     esac
-    
-    # Update timestamp and set pending flag for any event
     date +%s > "$TIMESTAMP_FILE"
     touch "$PENDING_FLAG"
     log_debug "Set pending flag/timestamp"
 }
 
-# launch the idle watcher
+# Start idle watcher
 process_when_idle &
 IDLE_CHECK_PID=$!
 log_debug "Idle watcher PID: $IDLE_CHECK_PID"
 
-# monitor filesystem
+# Monitor filesystem
 if command -v inotifywait >/dev/null 2>&1; then
     log_info "Using inotifywait"
     inotifywait -m -r -e create,move,modify,delete "$WATCH_DIR" --format '%w%f %e' |
     while read -r file event; do
-        log_info "FS event: $event on $file"
+        log_debug "FS event: $event on $file"
         handle_file_event "$file" "$event"
     done
 else
     log_info "Using fswatch"
-    while IFS= read -r -d "" event; do
-        # Extract filename from fswatch event
-        file="$event"
-        log_info "FS event: $file"
-        
-        # Check if file still exists to determine if it was deleted
+    fswatch -0 -r "$WATCH_DIR" | while IFS= read -r -d "" file; do
         if [[ ! -e "$file" ]]; then
+            log_debug "FS event: DELETE on $file"
             handle_file_event "$file" "DELETE"
         else
+            log_debug "FS event: MODIFY on $file"
             handle_file_event "$file" "MODIFY"
         fi
-    done < <(fswatch -0 -r "$WATCH_DIR")
+    done
 fi
