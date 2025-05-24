@@ -116,7 +116,7 @@ process_changes() {
             echo "$filename" >> "$CONVERTED_FILES_LOG"
             echo "$file" >> "$TO_BACKUP"
         else
-            log_debug "Already converted: $filename"
+            log_info "Already converted, skipping: $filename"
         fi
     done
 
