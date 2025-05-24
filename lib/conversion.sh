@@ -3,14 +3,7 @@
 
 set -euo pipefail
 
-#######################################
-# Détermine le chemin du script et du projet
-#######################################
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-# Chargement du module de journalisation et config
-source "$PROJECT_ROOT/config/config.cfg"
+# Chargement du module de journalisation 
 source "$PROJECT_ROOT/lib/logging.sh"
 source "$PROJECT_ROOT/lib/utils.sh"
 

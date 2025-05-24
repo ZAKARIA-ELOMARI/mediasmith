@@ -3,11 +3,6 @@
 # Fournit des fonctions standardisées pour la journalisation
 
 
-# Variables par défaut
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-source "$PROJECT_ROOT/config/config.cfg"
 # LOG_DIR=${LOG_DIR:-"/var/log/convertisseur_multimedia"}
 # LOG_FILE="${LOG_DIR}/history.log"
 # LOG_LEVEL=${LOG_LEVEL:-"INFO"}  # Niveaux: DEBUG, INFO, WARN, ERROR
