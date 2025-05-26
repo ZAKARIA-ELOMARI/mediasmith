@@ -18,6 +18,11 @@ print_usage() {
 # Détermine le chemin du script et du projet
 #######################################
 
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+source "$PROJECT_ROOT/config/config.cfg"
 source "$PROJECT_ROOT/lib/logging.sh"
 source "$PROJECT_ROOT/lib/utils.sh"
 source "$PROJECT_ROOT/lib/backup.sh"
@@ -57,6 +62,7 @@ if $DAEMON; then
 fi
 
 init_logging > /dev/null 2>&1
+export LOGGING_INITIALIZED=1
 
 # Ensure WATCH_DIR is set
 if [[ -z "$WATCH_DIR" ]]; then

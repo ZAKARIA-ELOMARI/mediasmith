@@ -6,7 +6,11 @@ set -euo pipefail
 source "$PROJECT_ROOT/lib/logging.sh"
 source "$PROJECT_ROOT/lib/utils.sh"
 
-init_logging > /dev/null 2>&1
+# Only initialize logging if not already initialized
+if [[ -z "${LOGGING_INITIALIZED:-}" ]]; then
+    init_logging > /dev/null 2>&1
+    export LOGGING_INITIALIZED=1
+fi
 
 ensure_dir "$BACKUP_DIR"
 touch "$TO_BACKUP"

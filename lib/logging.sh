@@ -21,6 +21,14 @@ get_timestamp() {
 init_logging() {
   local ts fallback_log="$PROJECT_ROOT/logs/history.log"
 
+  # Créer le répertoire logs du projet si nécessaire
+  if [ ! -d "$PROJECT_ROOT/logs" ]; then
+    mkdir -p "$PROJECT_ROOT/logs" 2>/dev/null || {
+      echo "Erreur : impossible de créer le répertoire logs du projet : $PROJECT_ROOT/logs"
+      exit 1
+    }
+  fi
+
   # Créer LOG_DIR si nécessaire
   if [ ! -d "$LOG_DIR" ]; then
     mkdir -p "$LOG_DIR" 2>/dev/null || {
@@ -37,10 +45,18 @@ init_logging() {
 
   # Créer le fichier de log si nécessaire
   if [ ! -f "$LOG_FILE" ]; then
+    # Ensure the directory exists for the log file
+    local log_dir="$(dirname "$LOG_FILE")"
+    if [ ! -d "$log_dir" ]; then
+      mkdir -p "$log_dir" 2>/dev/null || {
+        echo "Erreur : impossible de créer le répertoire pour le fichier de log : $log_dir"
+        exit 1
+      }
+    fi
+    
     touch "$LOG_FILE" 2>/dev/null || {
-      echo "Erreur : impossible de créer le fichier $LOG_FILE. Utilisation du fichier de secours : $fallback_log"
-      LOG_FILE="$fallback_log"
-      touch "$LOG_FILE"
+      echo "Erreur : impossible de créer le fichier $LOG_FILE"
+      exit 1
     }
     ts=$(get_timestamp)
     echo "[SYSTEM] $ts — Initialisation du fichier de logs" >> "$LOG_FILE"
