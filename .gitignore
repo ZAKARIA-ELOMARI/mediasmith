@@ -3,5 +3,5 @@ files
 out
 backup/
 nohup.out
-config/config.cfg
-config/config.cfg.*
+config/
+!config/config.example.cfg
