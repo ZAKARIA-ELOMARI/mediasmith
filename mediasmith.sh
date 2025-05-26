@@ -246,12 +246,15 @@ interactive_config() {
             if [[ -n "$new_value" ]]; then
                 # Update the configuration file
                 if grep -q "^${selected_var}=" "$config_file"; then
-                    # Variable exists, replace it
-                    sed -i "s|^${selected_var}=.*|${selected_var}=\"${new_value}\"|" "$config_file"
+                    if [[ "$(uname)" == "Darwin" ]]; then
+                        sed -i '' "s|^${selected_var}=.*|${selected_var}=\"${new_value}\"|" "$config_file"
+                    else
+                        sed -i "s|^${selected_var}=.*|${selected_var}=\"${new_value}\"|" "$config_file"
+                    fi
                 else
-                    # Variable doesn't exist, add it
                     echo "${selected_var}=\"${new_value}\"" >> "$config_file"
                 fi
+
                 
                 log_info "Updated $selected_var to '$new_value'"
                 echo "✓ Configuration updated successfully!"
@@ -495,7 +498,7 @@ main() {
     # Separate the arguments based on conversion script's expected format
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -r|-h)
+            -R|-h)
                 pre_source_opts+=("$1")
                 shift
                 ;;

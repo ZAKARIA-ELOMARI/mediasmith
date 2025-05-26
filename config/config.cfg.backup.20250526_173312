@@ -24,7 +24,7 @@ CUSTOM_IMAGE_EXT=""
 
 default_video_ext=mp4
 default_image_ext=jpeg
-default_audio_ext="flac"
+default_audio_ext=flac
 
 
 #######################################
