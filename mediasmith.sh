@@ -21,9 +21,16 @@ PROJECT_ROOT="$SCRIPT_DIR"
 if [[ -f "$PROJECT_ROOT/config/config.cfg" ]]; then
     source "$PROJECT_ROOT/config/config.cfg"
 else
-    echo "FATAL: Configuration file 'config.cfg' not found in 'config/' directory." >&2
-    exit 1
+    # config.cfg doesn't exist, try to create it from config.example.cfg
+    if [[ -f "$PROJECT_ROOT/config/config.example.cfg" ]]; then
+        cp "$PROJECT_ROOT/config/config.example.cfg" "$PROJECT_ROOT/config/config.cfg"
+        source "$PROJECT_ROOT/config/config.cfg"
+    else
+        echo "FATAL: Neither config.cfg nor config.example.cfg found in 'config/' directory." >&2
+        exit 1
+    fi
 fi
+
 
 source "$PROJECT_ROOT/lib/logging.sh"
 source "$PROJECT_ROOT/lib/utils.sh"
