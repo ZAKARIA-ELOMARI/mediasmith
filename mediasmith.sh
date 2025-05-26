@@ -14,8 +14,8 @@ set -euo pipefail
 
 # --- Project Structure and Configuration ---
 # Establishes the root directory and sources all necessary scripts and configurations.
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly PROJECT_ROOT="$SCRIPT_DIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
 
 # Source configuration and libraries. A check ensures the config file exists.
 if [[ -f "$PROJECT_ROOT/config/config.cfg" ]]; then
@@ -65,7 +65,7 @@ Core Options:
   -s, --subshell          Runs the processing logic within an isolated subshell.
   -l, --log DIR           Sets a custom directory for log files. (Requires sudo).
   -c, --config            Interactive configuration editor for modifying settings.
-  --restore               Resets the application to its factory default settings. (Requires sudo).
+  -r, --restore               Resets the application to its factory default settings. (Requires sudo).
   --watch                 Activates the directory watcher.
 
 Backup Management:
@@ -358,7 +358,7 @@ backup_now() {
 ##
 main() {
     # Initialize the logging system to ensure output is captured correctly.
-    init_logging
+    init_logging > /dev/null 2>&1
     export LOGGING_INITIALIZED=1
 
     # This loop ONLY parses the CORE mediasmith options.
@@ -399,7 +399,7 @@ main() {
                 interactive_config
                 exit 0
                 ;;
-            --restore)
+            -r|--restore)
                 restore_defaults
                 exit 0
                 ;;

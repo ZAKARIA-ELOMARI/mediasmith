@@ -49,8 +49,4 @@ convert -size 100x100 xc:red \
 convert -size 100x100 xc:blue \
   "$TEST_DIR/sample6.jpg"
 
-# 7. GIF animé simple (vert→jaune→magenta) (sample7.gif)
-convert -delay 100 xc:green xc:yellow xc:magenta -loop 0 \
-  "$TEST_DIR/sample7.gif"
-
 echo "[INFO] Génération des fichiers de test terminée."

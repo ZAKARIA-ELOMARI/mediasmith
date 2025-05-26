@@ -4,6 +4,11 @@
 set -euo pipefail
 
 # Chargement du module de journalisation 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Chargement du module de journalisation et config
+source "$PROJECT_ROOT/config/config.cfg"
 source "$PROJECT_ROOT/lib/logging.sh"
 source "$PROJECT_ROOT/lib/utils.sh"
 
@@ -340,14 +345,14 @@ show_help() {
     cat <<EOF
 Convertisseur multimédia v1.1
 
-Usage : "$0" [-h | -r] <fichier_source> [-o] <out_dir> [-v | -a | -i] <ext>
+Usage : "$0" [-h | -R] <fichier_source> [-o] <out_dir> [-v | -a | -i] <ext>
 
 Tu peux changer le répertoire de sortie et l'extension en modifiant config.cfg
 
 Options:
   -h, Affiche cette aide
   -o, Spécifie le répertoire de sortie
-  -r, Convertit tous les fichiers dans le dossier et ses sous-dossiers
+  -R, Convertit tous les fichiers dans le dossier et ses sous-dossiers
   -v, Spécifie l'extension vidéo
   -a, Spécifie l'extension audio
   -i, Spécifie l'extension image
@@ -369,10 +374,10 @@ EOF
 # Parse options
 #######################################
 parse_options() {
-  #parse -h and -r because they come before the source
+  #parse -h and -R because they come before the source
   while [[ ${1-} == -* ]]; do
     case "$1" in
-        -r)
+        -R)
             OPT_RECURSIVE=1
             shift
             ;;
