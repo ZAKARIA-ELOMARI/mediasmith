@@ -81,7 +81,7 @@ Backup Management:
   --backup-now            Trigger immediate backup of converted files to remote storage.
 
 Conversion Options (Passed to the conversion engine):
-  -r                      Process directory recursively.
+  -R                      Process directory recursively.
   -o <dir>                Specify a custom output directory.
   -v <ext>                Set a custom output extension for videos (e.g., webm).
   -a <ext>                Set a custom output extension for audio (e.g., flac).
