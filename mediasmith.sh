@@ -402,14 +402,20 @@ main() {
                 exit 0
                 ;;
             -f|--fork)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
                 EXEC_MODE="fork"
                 shift
                 ;;
             -t|--thread)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
                 EXEC_MODE="thread"
                 shift
                 ;;
             -s|--subshell)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
                 EXEC_MODE="subshell"
                 shift
                 ;;
@@ -443,14 +449,20 @@ main() {
                 exec "$PROJECT_ROOT/lib/watcher.sh" "${@:2}"
                 ;;
             --setup-backup)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
                 setup_remote_backup
                 exit 0
                 ;;
             --test-backup)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
                 test_remote_backup
                 exit 0
                 ;;
             --backup-now)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
                 backup_now
                 exit 0
                 ;;
