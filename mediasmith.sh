@@ -436,6 +436,8 @@ main() {
                 exit 0
                 ;;
             --watch)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
                 log_info "Starting file system watcher..."
                 # The watcher script is executed directly.
                 exec "$PROJECT_ROOT/lib/watcher.sh" "${@:2}"
@@ -584,7 +586,7 @@ main() {
             export default_video_ext default_image_ext default_audio_ext
 
             # ensure the child can write logs
-            init_logging
+            init_logging > /dev/null 2>&1
 
             log_info "Background job (PID $$) started."
             # The redirection is removed from here
