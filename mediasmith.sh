@@ -72,7 +72,7 @@ Core Options:
   -s, --subshell          Runs the processing logic within an isolated subshell.
   -l, --log DIR           Sets a custom directory for log files. (Requires sudo).
   -c, --config            Interactive configuration editor for modifying settings.
-  -r, --restore               Resets the application to its factory default settings. (Requires sudo).
+  -r, --restore           Resets the application to its factory default settings. (Requires sudo).
   --watch                 Activates the directory watcher.
 
 Backup Management:
@@ -108,6 +108,7 @@ Example Scenarios:
      ./mediasmith.sh --test-backup      # Test backup connectivity
      ./mediasmith.sh --backup-now       # Backup converted files now
 
+    Run sudo ./mediasmith.sh -r | --restore once in the beginning to set up the default configuration and resolve any permissions issues.
 EOF
 }
 
@@ -140,8 +141,22 @@ check_sudo() {
 # Restores the application to its default state by copying config.example.cfg to config.cfg.
 # Requires admin rights and clears logs.
 ##
+# In mediasmith.sh
+
+##
+# Restores the application to its default state by copying config.example.cfg to config.cfg.
+# Requires admin rights and clears logs.
+##
 restore_defaults() {
     check_sudo
+
+    # ── Make sure /var/log/convertisseur_multimedia exists and is yours ──
+    if [[ ! -d "$LOG_DIR" ]]; then
+        mkdir -p "$LOG_DIR"
+        chown "${SUDO_USER:-root}" "$LOG_DIR"
+        chmod 755 "$LOG_DIR"
+    fi
+
     log_warn "Default settings restoration initiated."
     
     local example_config="$PROJECT_ROOT/config/config.example.cfg"
@@ -164,6 +179,14 @@ restore_defaults() {
         
         # Copy example config to current config
         cp "$example_config" "$current_config"
+        
+        # --- FIX STARTS HERE ---
+        # Reset ownership of the new config file to the original user
+        if [[ -n "${SUDO_USER-}" ]]; then
+            chown "$SUDO_USER" "$current_config"
+            log_info "Set ownership of config.cfg to '$SUDO_USER'."
+        fi
+
         log_info "Configuration restored from template."
         
         # Clear logs
@@ -191,6 +214,8 @@ restore_defaults() {
 interactive_config() {
     local config_file="$PROJECT_ROOT/config/config.cfg"
     
+    # ── Make sure we have *some* log file (falls back to $PROJECT_ROOT/logs/ if needed) ──
+    init_logging
     log_info "Starting interactive configuration editor..."
     
     # Check if config file exists
@@ -367,9 +392,6 @@ backup_now() {
 # @param "$@" - All command-line arguments passed to the script.
 ##
 main() {
-    # Initialize the logging system to ensure output is captured correctly.
-    init_logging > /dev/null 2>&1
-    export LOGGING_INITIALIZED=1
 
     # This loop ONLY parses the CORE mediasmith options.
     # All other options will be passed down to the conversion script.
@@ -440,6 +462,10 @@ main() {
                 ;;
         esac
     done
+
+        # Initialize the logging system to ensure output is captured correctly.
+        init_logging
+        export LOGGING_INITIALIZED=1
 
     # If SOURCE_PATH is still empty, it means it was not provided before an option like -r.
     # We need to find the source path among the remaining arguments
@@ -534,35 +560,42 @@ main() {
         subshell)
             log_info "Executing in isolated subshell."
             (
-                # Export necessary variables for the subshell
+                # export everything the subshell needs
                 export PROJECT_ROOT LOG_DIR LOG_FILE LOG_LEVEL CONVERTED_FILES_LOG
                 export DEFAULT_OUT_DIR OPT_RECURSIVE OPT_OUT_DIR OPT_CUSTOM_AUDIO_EXT
                 export OPT_CUSTOM_VIDEO_EXT OPT_CUSTOM_IMAGE_EXT CUSTOM_OUT_DIR
                 export CUSTOM_AUDIO_EXT CUSTOM_VIDEO_EXT CUSTOM_IMAGE_EXT
                 export default_video_ext default_image_ext default_audio_ext
-                
+
                 log_info "Subshell (PID: $$) started."
                 convert_main "${pre_source_opts[@]}" "$SOURCE_PATH" "${post_source_opts[@]}"
                 log_info "Subshell finished."
             )
+            exit 0
             ;;
         fork)
-            log_info "Forking process to the background."
-            # Execute in background with proper variable inheritance
-            {
-                # Export necessary variables for the background process
-                export PROJECT_ROOT LOG_DIR LOG_FILE LOG_LEVEL CONVERTED_FILES_LOG
-                export DEFAULT_OUT_DIR OPT_RECURSIVE OPT_OUT_DIR OPT_CUSTOM_AUDIO_EXT
-                export OPT_CUSTOM_VIDEO_EXT OPT_CUSTOM_IMAGE_EXT CUSTOM_OUT_DIR
-                export CUSTOM_AUDIO_EXT CUSTOM_VIDEO_EXT CUSTOM_IMAGE_EXT
-                export default_video_ext default_image_ext default_audio_ext
-                
-                log_info "Forked process (PID: $$) is running."
-                convert_main "${pre_source_opts[@]}" "$SOURCE_PATH" "${post_source_opts[@]}"
-                log_info "Forked process (PID: $$) has completed."
-            } &
-            log_info "Task dispatched to background process with PID: $!."
-            ;;
+        log_info "Forking conversion into background..."
+        {
+            # bring in environment for the child
+            export PROJECT_ROOT LOG_DIR LOG_FILE LOG_LEVEL CONVERTED_FILES_LOG
+            export DEFAULT_OUT_DIR OPT_RECURSIVE OPT_OUT_DIR OPT_CUSTOM_AUDIO_EXT
+            export OPT_CUSTOM_VIDEO_EXT OPT_CUSTOM_IMAGE_EXT CUSTOM_OUT_DIR
+            export CUSTOM_AUDIO_EXT CUSTOM_VIDEO_EXT CUSTOM_IMAGE_EXT
+            export default_video_ext default_image_ext default_audio_ext
+
+            # ensure the child can write logs
+            init_logging
+
+            log_info "Background job (PID $$) started."
+            # The redirection is removed from here
+            convert_main "${pre_source_opts[@]}" "$SOURCE_PATH" "${post_source_opts[@]}"
+            log_info "Background job (PID $$) has completed."
+        } >> "$LOG_FILE" 2>&1 & # <-- The redirection now applies to the whole block
+        # detach from shell job control
+        disown $!
+        log_info "Dispatched background job with PID $!."
+        exit 0
+        ;;
         thread)
             log_info "Executing with high-performance threaded C helper."
             local thread_helper_path="$PROJECT_ROOT/bin/thread_converter"
