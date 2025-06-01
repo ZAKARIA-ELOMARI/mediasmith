@@ -106,7 +106,7 @@ log_debug() {
   local ts msg username
   ts=$(get_timestamp)
   username=$(whoami)
-  msg="$ts : $username : INFOS : $*"
+  msg="$ts : $username : DEBUG : $*"
   echo "$msg" >&2
   echo "$msg" >> "$LOG_FILE"
 }
