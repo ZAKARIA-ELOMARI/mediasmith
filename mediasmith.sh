@@ -14,16 +14,23 @@ set -euo pipefail
 
 # --- Project Structure and Configuration ---
 # Establishes the root directory and sources all necessary scripts and configurations.
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly PROJECT_ROOT="$SCRIPT_DIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
 
 # Source configuration and libraries. A check ensures the config file exists.
 if [[ -f "$PROJECT_ROOT/config/config.cfg" ]]; then
     source "$PROJECT_ROOT/config/config.cfg"
 else
-    echo "FATAL: Configuration file 'config.cfg' not found in 'config/' directory." >&2
-    exit 1
+    # config.cfg doesn't exist, try to create it from config.example.cfg
+    if [[ -f "$PROJECT_ROOT/config/config.example.cfg" ]]; then
+        cp "$PROJECT_ROOT/config/config.example.cfg" "$PROJECT_ROOT/config/config.cfg"
+        source "$PROJECT_ROOT/config/config.cfg"
+    else
+        echo "FATAL: Neither config.cfg nor config.example.cfg found in 'config/' directory." >&2
+        exit 1
+    fi
 fi
+
 
 source "$PROJECT_ROOT/lib/logging.sh"
 source "$PROJECT_ROOT/lib/utils.sh"
@@ -64,12 +71,17 @@ Core Options:
   -t, --thread            Delegates the conversion to a high-performance C program.
   -s, --subshell          Runs the processing logic within an isolated subshell.
   -l, --log DIR           Sets a custom directory for log files. (Requires sudo).
-  -e, --env VAR=VALUE     Sets environment variables for the current session.
-  --restore               Resets the application to its factory default settings. (Requires sudo).
+  -c, --config            Interactive configuration editor for modifying settings.
+  -r, --restore           Resets the application to its factory default settings. (Requires sudo).
   --watch                 Activates the directory watcher.
 
+Backup Management:
+  --setup-backup          Interactive setup for remote cloud backup using rclone.
+  --test-backup           Test remote backup configuration and connectivity.
+  --backup-now            Trigger immediate backup of converted files to remote storage.
+
 Conversion Options (Passed to the conversion engine):
-  -r                      Process directory recursively.
+  -R                      Process directory recursively.
   -o <dir>                Specify a custom output directory.
   -v <ext>                Set a custom output extension for videos (e.g., webm).
   -a <ext>                Set a custom output extension for audio (e.g., flac).
@@ -80,17 +92,23 @@ Example Scenarios:
      ./mediasmith.sh path/to/image.jpg
 
   2. Heavy-weight (Recursive video conversion to WEBM format with fork):
-     ./mediasmith.sh -f path/to/videos/ -r -v webm
+     ./mediasmith.sh -f path/to/videos/ -R -v webm
 
   3. Custom Output (Process audio files and place results in /tmp/converted):
      ./mediasmith.sh path/to/audio/ -o /tmp/converted
 
-  4. Set environment variables for custom behavior:
-     ./mediasmith.sh -e LOG_LEVEL=INFO -e DEFAULT_OUT_DIR=/tmp/output files/
+  4. Custom behavior with different execution modes:
+     ./mediasmith.sh -f path/to/videos/ -R -v webm
 
-  5. Multiple environment variables with different execution modes:
-     ./mediasmith.sh -e LOG_LEVEL=DEBUG -e WATCH_INTERVAL=5 -f files/ -r
+  5. Interactive configuration management:
+     ./mediasmith.sh -c
 
+  6. Backup Management:
+     ./mediasmith.sh --setup-backup     # Configure cloud backup
+     ./mediasmith.sh --test-backup      # Test backup connectivity
+     ./mediasmith.sh --backup-now       # Backup converted files now
+
+    Run sudo ./mediasmith.sh -r | --restore once in the beginning to set up the default configuration and resolve any permissions issues.
 EOF
 }
 
@@ -119,17 +137,65 @@ check_sudo() {
     fi
 }
 
+
 ##
-# Restores the application to its default state. Requires admin rights.
+# Restores the application to its default state by copying config.example.cfg to config.cfg.
+# Requires admin rights and clears logs.
 ##
 restore_defaults() {
     check_sudo
+
+    # ── Make sure /var/log/convertisseur_multimedia exists ──
+    if [[ ! -d "$LOG_DIR" ]]; then
+        mkdir -p "$LOG_DIR"
+        chown "${SUDO_USER:-root}" "$LOG_DIR"
+        chmod 755 "$LOG_DIR"
+    fi
+
     log_warn "Default settings restoration initiated."
-    if ask_yes_no "This will reset all configurations and clear logs. Are you sure you want to proceed?"; then
-        log_info "Restoring configuration and clearing logs..."
-        # Placeholder for actual restoration logic, e.g., copying a default config
-        # and clearing the log directory.
-        rm -f "$LOG_DIR"/*
+    
+    local example_config="$PROJECT_ROOT/config/config.example.cfg"
+    local current_config="$PROJECT_ROOT/config/config.cfg"
+    
+    # Check if example config exists
+    if [[ ! -f "$example_config" ]]; then
+        handle_error "$E_FILE_NOT_FOUND" "Default configuration template not found: $example_config"
+    fi
+    
+    if ask_yes_no "This will reset all configurations to defaults and clear logs. Are you sure you want to proceed?"; then
+        log_info "Restoring configuration from template..."
+        
+        # Backup current config if it exists
+        if [[ -f "$current_config" ]]; then
+            local backup_name="config.cfg.backup.$(date +%Y%m%d_%H%M%S)"
+            cp "$current_config" "$PROJECT_ROOT/config/$backup_name"
+            log_info "Current configuration backed up as: $backup_name"
+        fi
+        
+        # Copy example config to current config
+        cp "$example_config" "$current_config"
+        
+        # --- FIX STARTS HERE ---
+        # Reset ownership of the new config file to the original user
+        if [[ -n "${SUDO_USER-}" ]]; then
+            chown "$SUDO_USER" "$current_config"
+            log_info "Set ownership of config.cfg to '$SUDO_USER'."
+        fi
+
+        log_info "Configuration restored from template."
+        
+        # Clear logs
+        if [[ -d "$LOG_DIR" ]]; then
+            rm -f "$LOG_DIR"/*
+            log_info "Log directory cleared."
+        fi
+        
+        # Clear project logs
+        if [[ -d "$PROJECT_ROOT/logs" ]]; then
+            rm -f "$PROJECT_ROOT/logs"/*
+            log_info "Project logs cleared."
+        fi
+        
         log_info "Restore operation completed successfully."
     else
         log_info "Restore operation cancelled by user."
@@ -137,29 +203,181 @@ restore_defaults() {
 }
 
 ##
-# Sets an environment variable for the current session.
-# @param $1 - The environment variable assignment in the format VAR=VALUE
+# Interactive configuration editor that allows users to modify configuration variables.
+# Displays current values and prompts for new ones, updating config.cfg accordingly.
 ##
-set_environment_variable() {
-    local env_assignment="$1"
+interactive_config() {
+    local config_file="$PROJECT_ROOT/config/config.cfg"
     
-    # Validate the format (should contain exactly one '=' sign)
-    if [[ "$env_assignment" != *"="* ]]; then
-        handle_error "$E_INVALID_OPTION" "Invalid environment variable format. Expected: VAR=VALUE"
+    # ── Make sure we have *some* log file (falls back to $PROJECT_ROOT/logs/ if needed) ──
+    init_logging
+    log_info "Starting interactive configuration editor..."
+    
+    # Check if config file exists
+    if [[ ! -f "$config_file" ]]; then
+        log_error "Configuration file not found: $config_file"
+        return 1
     fi
     
-    # Split the assignment into variable name and value
-    local var_name="${env_assignment%%=*}"
-    local var_value="${env_assignment#*=}"
+    echo "=== MediaSmith Configuration Editor ==="
+    echo "Current configuration values:"
+    echo
     
-    # Validate variable name (should not be empty and follow bash variable naming rules)
-    if [[ -z "$var_name" ]] || [[ ! "$var_name" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
-        handle_error "$E_INVALID_OPTION" "Invalid variable name: '$var_name'. Variable names must start with a letter or underscore and contain only letters, numbers, and underscores."
+    # Define configurable variables with descriptions
+    declare -A config_vars=(
+        ["LOG_LEVEL"]="Logging level (DEBUG, INFO, WARN, ERROR)"
+        ["DEFAULT_OUT_DIR"]="Default output directory for converted files"
+        ["WATCH_INTERVAL"]="File watcher polling interval in seconds"
+        ["default_video_ext"]="Default video output extension"
+        ["default_audio_ext"]="Default audio output extension"
+        ["default_image_ext"]="Default image output extension"
+        ["REMOTE_DIR"]="Remote backup directory path"
+    )
+    
+    # Display current values
+    local counter=1
+    local var_list=()
+    for var in "${!config_vars[@]}"; do
+        # Get current value from config file
+        local current_value=$(grep "^${var}=" "$config_file" | cut -d'=' -f2- | sed 's/^"\(.*\)"$/\1/' | sed "s/^'\(.*\)'$/\1/")
+        if [[ -z "$current_value" ]]; then
+            current_value="(not set)"
+        fi
+        
+        echo "$counter. $var: $current_value"
+        echo "   Description: ${config_vars[$var]}"
+        echo
+        var_list+=("$var")
+        ((counter++))
+    done
+    
+    echo "0. Exit configuration editor"
+    echo
+    
+    while true; do
+        read -p "Select a variable to modify (0-$((${#var_list[@]}))): " choice
+        
+        if [[ "$choice" == "0" ]]; then
+            log_info "Configuration editor exited."
+            break
+        elif [[ "$choice" =~ ^[1-9][0-9]*$ ]] && [[ "$choice" -le "${#var_list[@]}" ]]; then
+            local selected_var="${var_list[$((choice-1))]}"
+            local current_value=$(grep "^${selected_var}=" "$config_file" | cut -d'=' -f2- | sed 's/^"\(.*\)"$/\1/' | sed "s/^'\(.*\)'$/\1/")
+            
+            echo "Selected: $selected_var"
+            echo "Current value: ${current_value:-"(not set)"}"
+            echo "Description: ${config_vars[$selected_var]}"
+            
+            read -p "Enter new value (or press Enter to keep current): " new_value
+            
+            if [[ -n "$new_value" ]]; then
+                # Update the configuration file
+                if grep -q "^${selected_var}=" "$config_file"; then
+                    if [[ "$(uname)" == "Darwin" ]]; then
+                        sed -i '' "s|^${selected_var}=.*|${selected_var}=\"${new_value}\"|" "$config_file"
+                    else
+                        sed -i "s|^${selected_var}=.*|${selected_var}=\"${new_value}\"|" "$config_file"
+                    fi
+                else
+                    echo "${selected_var}=\"${new_value}\"" >> "$config_file"
+                fi
+
+                
+                log_info "Updated $selected_var to '$new_value'"
+                echo "✓ Configuration updated successfully!"
+            else
+                echo "Value unchanged."
+            fi
+            echo
+        else
+            echo "Invalid selection. Please choose a number between 0 and ${#var_list[@]}."
+        fi
+    done
+}
+
+##
+# Setup remote backup configuration by calling the dedicated setup script.
+# This provides an interactive interface for configuring rclone and cloud storage.
+##
+setup_remote_backup() {
+    log_info "Starting remote backup setup..."
+    
+    local setup_script="$PROJECT_ROOT/scripts/setup_remote_backup.sh"
+    
+    if [[ ! -f "$setup_script" ]]; then
+        handle_error "$E_FILE_NOT_FOUND" "Remote backup setup script not found: $setup_script"
     fi
     
-    # Set the environment variable
-    export "$var_name"="$var_value"
-    log_info "Environment variable set: $var_name='$var_value'"
+    if [[ ! -x "$setup_script" ]]; then
+        log_info "Making setup script executable..."
+        chmod +x "$setup_script"
+    fi
+    
+    # Execute the setup script
+    "$setup_script"
+    
+    log_info "Remote backup setup completed."
+}
+
+##
+# Test remote backup configuration by calling the dedicated test script.
+# This verifies rclone configuration and connectivity to cloud storage.
+##
+test_remote_backup() {
+    log_info "Starting remote backup test..."
+    
+    local test_script="$PROJECT_ROOT/scripts/test_remote_backup.sh"
+    
+    if [[ ! -f "$test_script" ]]; then
+        handle_error "$E_FILE_NOT_FOUND" "Remote backup test script not found: $test_script"
+    fi
+    
+    if [[ ! -x "$test_script" ]]; then
+        log_info "Making test script executable..."
+        chmod +x "$test_script"
+    fi
+    
+    # Execute the test script
+    "$test_script"
+    
+    log_info "Remote backup test completed."
+}
+
+##
+# Trigger immediate backup of converted files to remote storage.
+# Uses the backup process from lib/backup.sh to synchronize files.
+##
+backup_now() {
+    log_info "Starting immediate backup process..."
+    
+    # Check if rclone is available
+    if ! command -v rclone &> /dev/null; then
+        log_warn "rclone is not installed. Remote backup functionality unavailable."
+        echo "To install rclone, run: curl https://rclone.org/install.sh | sudo bash"
+        echo "Or use --setup-backup to configure remote backup."
+        return 1
+    fi
+    
+    # Check if we have any files to backup
+    if [[ ! -f "$TO_BACKUP" ]] || [[ ! -s "$TO_BACKUP" ]]; then
+        log_info "No files pending backup."
+        echo "✓ No files to backup at this time."
+        return 0
+    fi
+    
+    echo "Starting backup process..."
+    
+    # Source and execute backup functionality
+    source "$PROJECT_ROOT/lib/backup.sh"
+    
+    if backup_process; then
+        log_info "Backup process completed successfully."
+        echo "✓ Backup completed successfully!"
+    else
+        log_error "Backup process failed."
+        echo "✗ Backup failed. Check logs for details."
+        return 1
+    fi
 }
 
 # --- Main Orchestration Logic ---
@@ -169,8 +387,6 @@ set_environment_variable() {
 # @param "$@" - All command-line arguments passed to the script.
 ##
 main() {
-    # Initialize the logging system to ensure output is captured correctly.
-    init_logging
 
     # This loop ONLY parses the CORE mediasmith options.
     # All other options will be passed down to the conversion script.
@@ -181,14 +397,20 @@ main() {
                 exit 0
                 ;;
             -f|--fork)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
                 EXEC_MODE="fork"
                 shift
                 ;;
             -t|--thread)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
                 EXEC_MODE="thread"
                 shift
                 ;;
             -s|--subshell)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
                 EXEC_MODE="subshell"
                 shift
                 ;;
@@ -200,28 +422,46 @@ main() {
                 fi
                 LOG_DIR="$2"
                 # Re-initialize logging with the new path.
+                unset LOGGING_INITIALIZED
                 init_logging
+                export LOGGING_INITIALIZED=1
                 log_info "Log directory has been set to '$LOG_DIR'."
                 shift 2
                 ;;
-            -e|--env)
-                # Ensure the environment variable assignment is provided.
-                if [[ -z "${2-}" ]]; then
-                    handle_error "$E_MISSING_PARAM" "The '-e' option requires an environment variable assignment (VAR=VALUE)."
-                fi
-                set_environment_variable "$2"
-                shift 2
+            -c|--config)
+                interactive_config
+                exit 0
                 ;;
-            --restore)
+            -r|--restore)
                 restore_defaults
                 exit 0
                 ;;
             --watch)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
                 log_info "Starting file system watcher..."
                 # The watcher script is executed directly.
                 exec "$PROJECT_ROOT/lib/watcher.sh" "${@:2}"
                 ;;
-            -*) # This is NOT an error. It could be a conversion option (e.g., -r, -o). Break the loop.
+            --setup-backup)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
+                setup_remote_backup
+                exit 0
+                ;;
+            --test-backup)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
+                test_remote_backup
+                exit 0
+                ;;
+            --backup-now)
+                init_logging > /dev/null 2>&1
+                export LOGGING_INITIALIZED=1
+                backup_now
+                exit 0
+                ;;
+            -*) # This is NOT an error. It could be a conversion option (e.g., -R, -o). Break the loop.
                 break
                 ;;
             *)  # This is the mandatory source path.
@@ -232,7 +472,11 @@ main() {
         esac
     done
 
-    # If SOURCE_PATH is still empty, it means it was not provided before an option like -r.
+        # Initialize the logging system to ensure output is captured correctly.
+        init_logging
+        export LOGGING_INITIALIZED=1
+
+    # If SOURCE_PATH is still empty, it means it was not provided before an option.
     # We need to find the source path among the remaining arguments
     if [[ -z "$SOURCE_PATH" ]]; then
         local temp_args=()
@@ -289,14 +533,14 @@ main() {
 
     # --- Execution Mode Dispatcher ---
     # Calls the appropriate function based on the selected execution mode.
-    # Need to separate -r/-h options (before source) from -o/-v/-a/-i options (after source)
+    # Need to separate -R/-h options (before source) from -o/-v/-a/-i options (after source)
     local pre_source_opts=()
     local post_source_opts=()
     
     # Separate the arguments based on conversion script's expected format
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -r|-h)
+            -R|-h)
                 pre_source_opts+=("$1")
                 shift
                 ;;
@@ -325,22 +569,42 @@ main() {
         subshell)
             log_info "Executing in isolated subshell."
             (
+                # export everything the subshell needs
+                export PROJECT_ROOT LOG_DIR LOG_FILE LOG_LEVEL CONVERTED_FILES_LOG
+                export DEFAULT_OUT_DIR OPT_RECURSIVE OPT_OUT_DIR OPT_CUSTOM_AUDIO_EXT
+                export OPT_CUSTOM_VIDEO_EXT OPT_CUSTOM_IMAGE_EXT CUSTOM_OUT_DIR
+                export CUSTOM_AUDIO_EXT CUSTOM_VIDEO_EXT CUSTOM_IMAGE_EXT
+                export default_video_ext default_image_ext default_audio_ext
+
                 log_info "Subshell (PID: $$) started."
                 convert_main "${pre_source_opts[@]}" "$SOURCE_PATH" "${post_source_opts[@]}"
                 log_info "Subshell finished."
             )
+            exit 0
             ;;
         fork)
-            log_info "Forking process to the background."
-            # The task is defined as a function and run in the background.
-            fork_task() {
-                log_info "Forked process (PID: $$) is running."
-                convert_main "${pre_source_opts[@]}" "$SOURCE_PATH" "${post_source_opts[@]}"
-                log_info "Forked process (PID: $$) has completed."
-            }
-            fork_task &
-            log_info "Task dispatched to background process with PID: $!."
-            ;;
+        log_info "Forking conversion into background..."
+        {
+            # bring in environment for the child
+            export PROJECT_ROOT LOG_DIR LOG_FILE LOG_LEVEL CONVERTED_FILES_LOG
+            export DEFAULT_OUT_DIR OPT_RECURSIVE OPT_OUT_DIR OPT_CUSTOM_AUDIO_EXT
+            export OPT_CUSTOM_VIDEO_EXT OPT_CUSTOM_IMAGE_EXT CUSTOM_OUT_DIR
+            export CUSTOM_AUDIO_EXT CUSTOM_VIDEO_EXT CUSTOM_IMAGE_EXT
+            export default_video_ext default_image_ext default_audio_ext
+
+            # ensure the child can write logs
+            init_logging > /dev/null 2>&1
+
+            log_info "Background job (PID $$) started."
+            convert_main "${pre_source_opts[@]}" "$SOURCE_PATH" "${post_source_opts[@]}"
+            log_info "Background job (PID $$) has completed."
+        } >> "$LOG_FILE" 2>&1 & 
+        # The redirection now applies to the whole block
+        # detach from shell job control
+        disown $!
+        log_info "Dispatched background job with PID $!."
+        exit 0
+        ;;
         thread)
             log_info "Executing with high-performance threaded C helper."
             local thread_helper_path="$PROJECT_ROOT/bin/thread_converter"
