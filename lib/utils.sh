@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# lib/utils.sh - fonctions utilitaires générales pour convertisseur_multimedia
+# utils.sh - Bibliothèque de fonctions utilitaires pour les scripts Bash
 
 set -euo pipefail
 
 # --- Création/répertoire ---
-# ensure_dir <dir> : crée le dossier s'il n'existe pas
+# crée le dossier s'il n'existe pas
 ensure_dir() {
   local dir="$1"
   if [ ! -d "$dir" ]; then
@@ -12,7 +12,7 @@ ensure_dir() {
   fi
 }
 
-# === FILE TYPE CHECKING FUNCTION ===
+# --- détermine le type de fichier ---
 get_type() {
     MIME_TYPE=$(file --mime-type -b "$1")
     case "$MIME_TYPE" in
@@ -24,7 +24,7 @@ get_type() {
 }
 
 # --- Vérification de commandes ---
-# check_command <cmd> : quitte si la commande n'est pas trouvée
+# quitte si la commande n'est pas trouvée
 check_command() {
   local cmd="$1"
   if ! command -v "$cmd" &>/dev/null; then
@@ -51,7 +51,7 @@ ask_yes_no() {
 }
 
 # --- Sélection dans un menu ---
-# select_option <message> <opt1> <opt2> ... : affiche les options, renvoie la chaîne choisie
+# affiche les options, renvoie la chaîne choisie
 select_option() {
   local prompt="$1"
   shift

@@ -3,7 +3,6 @@
 
 set -euo pipefail
 
-# Fonctions de log
 log_info()  { echo "[INFO]  $*"; }
 log_error() { echo "[ERROR] $*" >&2; }
 log_warn()  { echo "[WARN]  $*" >&2; }
@@ -31,7 +30,6 @@ fi
 
 # Détecter le gestionnaire de paquets selon la plateforme
 if [ "$PLATFORM" = "linux" ]; then
-  # Gestionnaires de paquets Linux
   if command -v apt-get >/dev/null 2>&1; then
     PKG_MANAGER="apt-get"
     INSTALL_CMD="install -y"
@@ -61,7 +59,7 @@ elif [ "$PLATFORM" = "macos" ]; then
   elif command -v nix-env >/dev/null 2>&1; then
     PKG_MANAGER="nix-env"
     INSTALL_CMD="-iA"
-    # Note: Pour nix-darwin avec flakes, vous pourriez préférer gérer cela dans votre configuration
+    
     DEPS=(nixpkgs.ffmpeg nixpkgs.fswatch nixpkgs.imagemagick)
     OPTIONAL_DEPS=(nixpkgs.rclone)
     log_warn "Nix détecté. Considérez ajouter ces paquets à votre configuration nix-darwin avec flakes :"
@@ -155,7 +153,6 @@ for pkg in "${OPTIONAL_DEPS[@]}"; do
   fi
 done
 
-# Message spécial pour nix-darwin avec flakes
 if [ "$PKG_MANAGER" = "nix-env" ]; then
   log_info ""
   log_info "=== Recommandation pour nix-darwin avec flakes ==="

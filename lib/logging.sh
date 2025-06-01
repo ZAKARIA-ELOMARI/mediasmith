@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
-# lib/logging.sh - Module de journalisation pour convertisseur multimédia
-# Fournit des fonctions standardisées pour la journalisation
+# logging.sh - Fournit des fonctions standardisées pour la journalisation
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Source the main configuration file
 source "$PROJECT_ROOT/config/config.cfg"
 
 #######################################
 # Récupérer un timestamp au format yyyy-mm-dd-hh-mm-ss
 #######################################
 get_timestamp() {
-  # Format updated to match the requirement: yyyy-mm-dd-hh-mm-ss
   date "+%Y-%m-%d-%H-%M-%S"
 }
 
@@ -22,7 +19,7 @@ get_timestamp() {
 init_logging() {
   local ts fallback_log="$PROJECT_ROOT/logs/history.log"
 
-  # Créer le répertoire logs du projet si nécessaire
+  # Créer le répertoire logs du projet s'il n'existe pas
   if [ ! -d "$PROJECT_ROOT/logs" ]; then
     mkdir -p "$PROJECT_ROOT/logs" 2>/dev/null || {
       echo "Erreur : impossible de créer le répertoire logs du projet : $PROJECT_ROOT/logs"
@@ -31,7 +28,6 @@ init_logging() {
   fi
 
   # Créer LOG_DIR si nécessaire
-  # The variable $LOG_DIR should be set to /var/log/yourprogramname in config.cfg
   if [ ! -d "$LOG_DIR" ]; then
     mkdir -p "$LOG_DIR" 2>/dev/null || {
       echo "Erreur : impossible de créer $LOG_DIR. Utilisation du fichier de secours : $fallback_log"
@@ -61,8 +57,6 @@ init_logging() {
     }
   fi
   
-  # Note: The initial log entry is not strictly required by the new format,
-  # but can be useful. We will format it according to the new standard.
   log_info "=== Démarrage nouvelle session ==="
 }
 
@@ -73,7 +67,7 @@ log_info() {
   local ts msg username
   ts=$(get_timestamp)
   username=$(whoami)
-  # Format updated to: yyyy-mm-dd-hh-mm-ss : username : INFOS : message
+  # Format : yyyy-mm-dd-hh-mm-ss : username : INFOS : message
   msg="$ts : $username : INFOS : $*"
   echo "$msg"
   echo "$msg" >> "$LOG_FILE"
@@ -86,7 +80,7 @@ log_warn() {
   local ts msg username
   ts=$(get_timestamp)
   username=$(whoami)
-  # Warnings are also standard output, mapped to INFOS
+
   msg="$ts : $username : INFOS : $*"
   echo "$msg"
   echo "$msg" >> "$LOG_FILE"
@@ -99,7 +93,6 @@ log_error() {
   local ts msg username
   ts=$(get_timestamp)
   username=$(whoami)
-  # Format updated to: yyyy-mm-dd-hh-mm-ss : username : ERROR : message
   msg="$ts : $username : ERROR : $*"
   echo "$msg" >&2
   echo "$msg" >> "$LOG_FILE"
@@ -113,7 +106,6 @@ log_debug() {
   local ts msg username
   ts=$(get_timestamp)
   username=$(whoami)
-  # Debug messages are also standard output, mapped to INFOS
   msg="$ts : $username : INFOS : $*"
   echo "$msg" >&2
   echo "$msg" >> "$LOG_FILE"

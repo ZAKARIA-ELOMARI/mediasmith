@@ -92,13 +92,13 @@ Example Scenarios:
      ./mediasmith.sh path/to/image.jpg
 
   2. Heavy-weight (Recursive video conversion to WEBM format with fork):
-     ./mediasmith.sh -f path/to/videos/ -r -v webm
+     ./mediasmith.sh -f path/to/videos/ -R -v webm
 
   3. Custom Output (Process audio files and place results in /tmp/converted):
      ./mediasmith.sh path/to/audio/ -o /tmp/converted
 
   4. Custom behavior with different execution modes:
-     ./mediasmith.sh -f path/to/videos/ -r -v webm
+     ./mediasmith.sh -f path/to/videos/ -R -v webm
 
   5. Interactive configuration management:
      ./mediasmith.sh -c
@@ -137,11 +137,6 @@ check_sudo() {
     fi
 }
 
-##
-# Restores the application to its default state by copying config.example.cfg to config.cfg.
-# Requires admin rights and clears logs.
-##
-# In mediasmith.sh
 
 ##
 # Restores the application to its default state by copying config.example.cfg to config.cfg.
@@ -150,7 +145,7 @@ check_sudo() {
 restore_defaults() {
     check_sudo
 
-    # ── Make sure /var/log/convertisseur_multimedia exists and is yours ──
+    # ── Make sure /var/log/convertisseur_multimedia exists ──
     if [[ ! -d "$LOG_DIR" ]]; then
         mkdir -p "$LOG_DIR"
         chown "${SUDO_USER:-root}" "$LOG_DIR"
@@ -466,7 +461,7 @@ main() {
                 backup_now
                 exit 0
                 ;;
-            -*) # This is NOT an error. It could be a conversion option (e.g., -r, -o). Break the loop.
+            -*) # This is NOT an error. It could be a conversion option (e.g., -R, -o). Break the loop.
                 break
                 ;;
             *)  # This is the mandatory source path.
@@ -481,7 +476,7 @@ main() {
         init_logging
         export LOGGING_INITIALIZED=1
 
-    # If SOURCE_PATH is still empty, it means it was not provided before an option like -r.
+    # If SOURCE_PATH is still empty, it means it was not provided before an option.
     # We need to find the source path among the remaining arguments
     if [[ -z "$SOURCE_PATH" ]]; then
         local temp_args=()
@@ -538,7 +533,7 @@ main() {
 
     # --- Execution Mode Dispatcher ---
     # Calls the appropriate function based on the selected execution mode.
-    # Need to separate -r/-h options (before source) from -o/-v/-a/-i options (after source)
+    # Need to separate -R/-h options (before source) from -o/-v/-a/-i options (after source)
     local pre_source_opts=()
     local post_source_opts=()
     
@@ -601,10 +596,10 @@ main() {
             init_logging > /dev/null 2>&1
 
             log_info "Background job (PID $$) started."
-            # The redirection is removed from here
             convert_main "${pre_source_opts[@]}" "$SOURCE_PATH" "${post_source_opts[@]}"
             log_info "Background job (PID $$) has completed."
-        } >> "$LOG_FILE" 2>&1 & # <-- The redirection now applies to the whole block
+        } >> "$LOG_FILE" 2>&1 & 
+        # The redirection now applies to the whole block
         # detach from shell job control
         disown $!
         log_info "Dispatched background job with PID $!."

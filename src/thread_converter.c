@@ -10,13 +10,13 @@
 #include <errno.h>
 #include <time.h>
 
-// Configuration constants
+// Constantes de configuration
 #define MAX_THREADS 8
 #define MAX_QUEUE_SIZE 1000
 #define MAX_PATH_LEN 4096
 #define LOG_BUFFER_SIZE 512
 
-// Statistics structure for tracking progress
+// Structure de statistiques pour suivre le progrès
 typedef struct {
     int total_files;
     int completed_files;
@@ -25,13 +25,13 @@ typedef struct {
     time_t start_time;
 } ConversionStats;
 
-// Job structure for individual file conversions
+// Structure de tâche pour les conversions de fichiers individuels
 typedef struct {
     char filepath[MAX_PATH_LEN];
     int job_id;
 } ConversionJob;
 
-// Thread-safe work queue
+// File de travail thread-safe
 typedef struct {
     ConversionJob jobs[MAX_QUEUE_SIZE];
     int front;
@@ -43,13 +43,13 @@ typedef struct {
     pthread_cond_t not_full;
 } WorkQueue;
 
-// Global variables
+// Variables globales
 static WorkQueue work_queue;
 static ConversionStats stats;
 static pthread_t worker_threads[MAX_THREADS];
 static int num_threads;
 
-// Function declarations
+// Déclarations de fonctions
 void init_work_queue(void);
 void cleanup_work_queue(void);
 int enqueue_job(const ConversionJob* job);
@@ -63,22 +63,22 @@ int get_optimal_thread_count(void);
 int is_supported_file(const char* filepath);
 void shutdown_workers(void);
 
-// Initialize the work queue
+// Initialiser la file de travail
 void init_work_queue(void) {
     memset(&work_queue, 0, sizeof(WorkQueue));
     
     if (pthread_mutex_init(&work_queue.mutex, NULL) != 0) {
-        fprintf(stderr, "Failed to initialize work queue mutex\n");
+        fprintf(stderr, "Échec de l'initialisation du mutex de la file de travail\n");
         exit(1);
     }
     
     if (pthread_cond_init(&work_queue.not_empty, NULL) != 0) {
-        fprintf(stderr, "Failed to initialize not_empty condition\n");
+        fprintf(stderr, "Échec de l'initialisation de la condition not_empty\n");
         exit(1);
     }
     
     if (pthread_cond_init(&work_queue.not_full, NULL) != 0) {
-        fprintf(stderr, "Failed to initialize not_full condition\n");
+        fprintf(stderr, "Échec de l'initialisation de la condition not_full\n");
         exit(1);
     }
     
@@ -88,18 +88,18 @@ void init_work_queue(void) {
     work_queue.shutdown = 0;
 }
 
-// Cleanup work queue resources
+// Nettoyer les ressources de la file de travail
 void cleanup_work_queue(void) {
     pthread_mutex_destroy(&work_queue.mutex);
     pthread_cond_destroy(&work_queue.not_empty);
     pthread_cond_destroy(&work_queue.not_full);
 }
 
-// Add job to queue (thread-safe)
+// Ajouter une tâche à la file (thread-safe)
 int enqueue_job(const ConversionJob* job) {
     pthread_mutex_lock(&work_queue.mutex);
     
-    // Wait if queue is full
+    // Attendre si la file est pleine
     while (work_queue.count == MAX_QUEUE_SIZE && !work_queue.shutdown) {
         pthread_cond_wait(&work_queue.not_full, &work_queue.mutex);
     }
@@ -109,113 +109,113 @@ int enqueue_job(const ConversionJob* job) {
         return -1;
     }
     
-    // Add job to queue
+    // Ajouter la tâche à la file
     work_queue.jobs[work_queue.rear] = *job;
     work_queue.rear = (work_queue.rear + 1) % MAX_QUEUE_SIZE;
     work_queue.count++;
     
-    // Signal that queue is not empty
+    // Signaler que la file n'est pas vide
     pthread_cond_signal(&work_queue.not_empty);
     pthread_mutex_unlock(&work_queue.mutex);
     
     return 0;
 }
 
-// Remove job from queue (thread-safe)
+// Retirer une tâche de la file (thread-safe)
 int dequeue_job(ConversionJob* job) {
     pthread_mutex_lock(&work_queue.mutex);
     
-    // Wait for job or shutdown signal
+    // Attendre une tâche ou le signal d'arrêt
     while (work_queue.count == 0 && !work_queue.shutdown) {
         pthread_cond_wait(&work_queue.not_empty, &work_queue.mutex);
     }
     
     if (work_queue.shutdown && work_queue.count == 0) {
         pthread_mutex_unlock(&work_queue.mutex);
-        return -1; // No more jobs
+        return -1; // Plus de tâches
     }
     
-    // Get job from queue
+    // Obtenir la tâche de la file
     *job = work_queue.jobs[work_queue.front];
     work_queue.front = (work_queue.front + 1) % MAX_QUEUE_SIZE;
     work_queue.count--;
     
-    // Signal that queue is not full
+    // Signaler que la file n'est pas pleine
     pthread_cond_signal(&work_queue.not_full);
     pthread_mutex_unlock(&work_queue.mutex);
     
     return 0;
 }
 
-// Worker thread function
+// Fonction du thread de travail
 void* worker_thread(void* arg) {
     int thread_id = *(int*)arg;
     ConversionJob job;
     
-    safe_log("INFO", thread_id, "Worker thread started");
+    safe_log("INFO", thread_id, "Thread de travail démarré");
     
     while (1) {
         if (dequeue_job(&job) != 0) {
-            break; // Shutdown or error
+            break; // Arrêt ou erreur
         }
         
-        safe_log("INFO", thread_id, "Processing job %d: %s", job.job_id, job.filepath);
+        safe_log("INFO", thread_id, "Traitement de la tâche %d: %s", job.job_id, job.filepath);
         
         int success = process_conversion_job(&job);
         update_stats(success);
         
         if (success) {
-            safe_log("SUCCESS", thread_id, "Completed job %d: %s", job.job_id, job.filepath);
+            safe_log("SUCCÈS", thread_id, "Tâche %d terminée: %s", job.job_id, job.filepath);
         } else {
-            safe_log("ERROR", thread_id, "Failed job %d: %s", job.job_id, job.filepath);
+            safe_log("ERREUR", thread_id, "Échec de la tâche %d: %s", job.job_id, job.filepath);
         }
         
         print_progress();
     }
     
-    safe_log("INFO", thread_id, "Worker thread terminated");
+    safe_log("INFO", thread_id, "Thread de travail terminé");
     return NULL;
 }
 
-// Process a single conversion job
+// Traiter une tâche de conversion unique
 int process_conversion_job(const ConversionJob* job) {
     char command[MAX_PATH_LEN * 2];
     char cwd[MAX_PATH_LEN];
     
-    // Get current working directory
+    // Obtenir le répertoire de travail actuel
     if (getcwd(cwd, sizeof(cwd)) == NULL) {
-        perror("getcwd failed");
+        perror("échec de getcwd");
         return 0;
     }
     
-    // Build command
+    // Construire la commande
     int ret = snprintf(command, sizeof(command), 
                       "%s/lib/conversion.sh \"%s\"", 
                       cwd, job->filepath);
     
     if (ret >= (int)sizeof(command)) {
-        fprintf(stderr, "Command buffer overflow for file: %s\n", job->filepath);
+        fprintf(stderr, "Débordement du tampon de commande pour le fichier: %s\n", job->filepath);
         return 0;
     }
     
-    // Execute conversion
+    // Exécuter la conversion
     int result = system(command);
     
     if (result == 0) {
-        return 1; // Success
+        return 1; // Succès
     } else {
         if (WIFEXITED(result)) {
-            fprintf(stderr, "Conversion script exited with code: %d for file: %s\n", 
+            fprintf(stderr, "Le script de conversion s'est terminé avec le code: %d pour le fichier: %s\n", 
                    WEXITSTATUS(result), job->filepath);
         } else if (WIFSIGNALED(result)) {
-            fprintf(stderr, "Conversion script killed by signal: %d for file: %s\n", 
+            fprintf(stderr, "Le script de conversion a été tué par le signal: %d pour le fichier: %s\n", 
                    WTERMSIG(result), job->filepath);
         }
-        return 0; // Failure
+        return 0; // Échec
     }
 }
 
-// Thread-safe logging
+// Logging thread-safe
 void safe_log(const char* level, int thread_id, const char* format, ...) {
     static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
     char log_buffer[LOG_BUFFER_SIZE];
@@ -223,25 +223,25 @@ void safe_log(const char* level, int thread_id, const char* format, ...) {
     time_t now;
     struct tm* tm_info;
     
-    // Get timestamp
+    // Obtenir l'horodatage
     time(&now);
     tm_info = localtime(&now);
     strftime(timestamp, sizeof(timestamp), "%H:%M:%S", tm_info);
     
-    // Format message
+    // Formater le message
     va_list args;
     va_start(args, format);
     vsnprintf(log_buffer, sizeof(log_buffer), format, args);
     va_end(args);
     
-    // Thread-safe output
+    // Sortie thread-safe
     pthread_mutex_lock(&log_mutex);
     printf("[%s] [%s] THREAD-%d: %s\n", timestamp, level, thread_id, log_buffer);
     fflush(stdout);
     pthread_mutex_unlock(&log_mutex);
 }
 
-// Update conversion statistics
+// Mettre à jour les statistiques de conversion
 void update_stats(int success) {
     pthread_mutex_lock(&stats.stats_mutex);
     stats.completed_files++;
@@ -251,12 +251,12 @@ void update_stats(int success) {
     pthread_mutex_unlock(&stats.stats_mutex);
 }
 
-// Print progress information
+// Afficher les informations de progrès
 void print_progress(void) {
     static time_t last_print = 0;
     time_t now = time(NULL);
     
-    // Limit progress updates to once per second
+    // Limiter les mises à jour de progrès à une fois par seconde
     if (now - last_print < 1) {
         return;
     }
@@ -274,40 +274,40 @@ void print_progress(void) {
         double progress = (double)completed / total * 100.0;
         double rate = elapsed > 0 ? completed / elapsed : 0;
         
-        printf("\r[PROGRESS] %d/%d (%.1f%%) - Success: %d, Failed: %d, Rate: %.1f files/sec", 
+        printf("\r[PROGRÈS] %d/%d (%.1f%%) - Succès: %d, Échecs: %d, Débit: %.1f fichiers/sec", 
                completed, total, progress, successful, failed, rate);
         fflush(stdout);
     }
 }
 
-// Get optimal number of threads based on CPU cores
+// Obtenir le nombre optimal de threads basé sur les cœurs CPU
 int get_optimal_thread_count(void) {
     long num_cores = sysconf(_SC_NPROCESSORS_ONLN);
     if (num_cores <= 0) {
-        num_cores = 4; // Default fallback
+        num_cores = 4; // Valeur par défaut de secours
     }
     
-    // Use number of cores, but cap at MAX_THREADS
+    // Utiliser le nombre de cœurs, mais limité à MAX_THREADS
     int optimal = (int)num_cores;
     if (optimal > MAX_THREADS) {
         optimal = MAX_THREADS;
     }
     
-    printf("Detected %ld CPU cores, using %d worker threads\n", num_cores, optimal);
+    printf("Détection de %ld cœurs CPU, utilisation de %d threads de travail\n", num_cores, optimal);
     return optimal;
 }
 
-// Check if file has supported extension
+// Vérifier si le fichier a une extension supportée
 int is_supported_file(const char* filepath) {
     const char* ext = strrchr(filepath, '.');
     if (!ext) return 0;
     
-    ext++; // Skip the dot
+    ext++; // Ignorer le point
     
-    // Supported extensions (add more as needed)
+    // Extensions supportées (ajouter plus si nécessaire)
     const char* supported[] = {
         "mp3", "wav", "flac", "aac", "ogg",           // Audio
-        "mp4", "mkv", "avi", "mov", "flv", "wmv",     // Video
+        "mp4", "mkv", "avi", "mov", "flv", "wmv",     // Vidéo
         "png", "jpg", "jpeg", "gif", "bmp", "tiff", "webp", // Image
         NULL
     };
@@ -321,24 +321,24 @@ int is_supported_file(const char* filepath) {
     return 0;
 }
 
-// Signal workers to shutdown
+// Signaler aux workers de s'arrêter
 void shutdown_workers(void) {
     pthread_mutex_lock(&work_queue.mutex);
     work_queue.shutdown = 1;
     pthread_cond_broadcast(&work_queue.not_empty);
     pthread_mutex_unlock(&work_queue.mutex);
     
-    // Wait for all workers to finish
+    // Attendre que tous les workers se terminent
     for (int i = 0; i < num_threads; i++) {
         pthread_join(worker_threads[i], NULL);
     }
 }
 
-// Recursively scan directory and enqueue jobs
+// Scanner récursivement le répertoire et mettre en file les tâches
 int scan_directory(const char* dir_path, int* job_counter) {
     DIR* d = opendir(dir_path);
     if (!d) {
-        perror("opendir failed");
+        perror("échec d'opendir");
         return -1;
     }
     
@@ -346,7 +346,7 @@ int scan_directory(const char* dir_path, int* job_counter) {
     int files_found = 0;
     
     while ((dir = readdir(d)) != NULL) {
-        // Skip "." and ".."
+        // Ignorer "." et ".."
         if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0) {
             continue;
         }
@@ -355,18 +355,18 @@ int scan_directory(const char* dir_path, int* job_counter) {
         int ret = snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, dir->d_name);
         
         if (ret >= (int)sizeof(full_path)) {
-            fprintf(stderr, "Path too long: %s/%s\n", dir_path, dir->d_name);
+            fprintf(stderr, "Chemin trop long: %s/%s\n", dir_path, dir->d_name);
             continue;
         }
         
         struct stat path_stat;
         if (stat(full_path, &path_stat) != 0) {
-            perror("stat failed");
+            perror("échec de stat");
             continue;
         }
         
         if (S_ISREG(path_stat.st_mode)) {
-            // It's a regular file
+            // C'est un fichier régulier
             if (is_supported_file(full_path)) {
                 ConversionJob job;
                 strncpy(job.filepath, full_path, sizeof(job.filepath) - 1);
@@ -376,14 +376,12 @@ int scan_directory(const char* dir_path, int* job_counter) {
                 if (enqueue_job(&job) == 0) {
                     files_found++;
                 } else {
-                    fprintf(stderr, "Failed to enqueue job for: %s\n", full_path);
+                    fprintf(stderr, "Échec de la mise en file de la tâche pour: %s\n", full_path);
                 }
             } else {
-                printf("Skipping unsupported file: %s\n", full_path);
+                printf("Fichier non supporté ignoré: %s\n", full_path);
             }
         }
-        // Note: Not handling subdirectories in this version
-        // Add recursive directory scanning here if needed
     }
     
     closedir(d);
@@ -392,64 +390,64 @@ int scan_directory(const char* dir_path, int* job_counter) {
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <directory_path>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <chemin_répertoire>\n", argv[0]);
         return 1;
     }
     
     char* dir_path = argv[1];
-    printf("Enhanced C threaded converter starting...\n");
-    printf("Processing directory: %s\n", dir_path);
+    printf("Convertisseur C threadé amélioré en cours de démarrage...\n");
+    printf("Traitement du répertoire: %s\n", dir_path);
     
-    // Initialize statistics
+    // Initialiser les statistiques
     memset(&stats, 0, sizeof(ConversionStats));
     if (pthread_mutex_init(&stats.stats_mutex, NULL) != 0) {
-        fprintf(stderr, "Failed to initialize stats mutex\n");
+        fprintf(stderr, "Échec de l'initialisation du mutex des statistiques\n");
         return 1;
     }
     stats.start_time = time(NULL);
     
-    // Initialize work queue
+    // Initialiser la file de travail
     init_work_queue();
     
-    // Determine optimal thread count
+    // Déterminer le nombre optimal de threads
     num_threads = get_optimal_thread_count();
     
-    // Create worker threads
+    // Créer les threads de travail
     int thread_ids[MAX_THREADS];
     for (int i = 0; i < num_threads; i++) {
         thread_ids[i] = i + 1;
         if (pthread_create(&worker_threads[i], NULL, worker_thread, &thread_ids[i]) != 0) {
-            fprintf(stderr, "Failed to create worker thread %d\n", i + 1);
+            fprintf(stderr, "Échec de la création du thread de travail %d\n", i + 1);
             return 1;
         }
     }
     
-    // Scan directory and enqueue jobs
+    // Scanner le répertoire et mettre les tâches en file
     int job_counter = 0;
     int files_found = scan_directory(dir_path, &job_counter);
     
     if (files_found < 0) {
-        fprintf(stderr, "Failed to scan directory\n");
+        fprintf(stderr, "Échec du scan du répertoire\n");
         shutdown_workers();
         cleanup_work_queue();
         return 1;
     }
     
-    // Update total files count
+    // Mettre à jour le compteur total de fichiers
     pthread_mutex_lock(&stats.stats_mutex);
     stats.total_files = files_found;
     pthread_mutex_unlock(&stats.stats_mutex);
     
-    printf("Found %d supported files, queued for processing\n", files_found);
+    printf("Trouvé %d fichiers supportés, mis en file pour traitement\n", files_found);
     
     if (files_found == 0) {
-        printf("No supported files found in directory\n");
+        printf("Aucun fichier supporté trouvé dans le répertoire\n");
         shutdown_workers();
         cleanup_work_queue();
         return 0;
     }
     
-    // Wait for all jobs to complete
+    // Attendre que toutes les tâches soient terminées
     while (1) {
         pthread_mutex_lock(&stats.stats_mutex);
         int completed = stats.completed_files;
@@ -463,10 +461,10 @@ int main(int argc, char* argv[]) {
         sleep(1);
     }
     
-    // Shutdown workers
+    // Arrêter les workers
     shutdown_workers();
     
-    // Final statistics
+    // Statistiques finales
     pthread_mutex_lock(&stats.stats_mutex);
     int total = stats.total_files;
     int completed = stats.completed_files;
@@ -475,18 +473,18 @@ int main(int argc, char* argv[]) {
     double elapsed = difftime(time(NULL), stats.start_time);
     pthread_mutex_unlock(&stats.stats_mutex);
     
-    printf("\n\n=== CONVERSION SUMMARY ===\n");
-    printf("Total files: %d\n", total);
-    printf("Successful: %d\n", successful);
-    printf("Failed: %d\n", failed);
-    printf("Time elapsed: %.1f seconds\n", elapsed);
-    printf("Average rate: %.2f files/second\n", elapsed > 0 ? completed / elapsed : 0);
-    printf("Success rate: %.1f%%\n", total > 0 ? (double)successful / total * 100.0 : 0);
+    printf("\n\n=== RÉSUMÉ DE CONVERSION ===\n");
+    printf("Total des fichiers: %d\n", total);
+    printf("Réussis: %d\n", successful);
+    printf("Échecs: %d\n", failed);
+    printf("Temps écoulé: %.1f secondes\n", elapsed);
+    printf("Débit moyen: %.2f fichiers/seconde\n", elapsed > 0 ? completed / elapsed : 0);
+    printf("Taux de réussite: %.1f%%\n", total > 0 ? (double)successful / total * 100.0 : 0);
     
-    // Cleanup
+    // Nettoyage
     cleanup_work_queue();
     pthread_mutex_destroy(&stats.stats_mutex);
     
-    printf("Enhanced threaded C helper finished.\n");
+    printf("Assistant C threadé amélioré terminé.\n");
     return failed > 0 ? 1 : 0;
 }

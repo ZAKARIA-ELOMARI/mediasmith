@@ -49,10 +49,25 @@
 
 ### Quick Setup
 ```bash
+# 1. Install all dependencies automatically
+make all
+
+# 2. Generate test files for development
+make test
+
+# 3. Test the system
+./scripts/system_info.sh
+
+# 4. Run first conversion
+./mediasmith.sh sample_file.jpg
+```
+
+### Manual Setup (Alternative)
+```bash
 # 1. Make executable
 chmod +x mediasmith.sh
 
-# 2. Install dependencies
+# 2. Install dependencies manually
 ./scripts/deps_check.sh
 
 # 3. Test the system
@@ -67,6 +82,13 @@ chmod +x mediasmith.sh
 - **Linux**: `inotify-tools` for real-time monitoring
 - **macOS**: `fswatch` for real-time monitoring (install via Homebrew)
 
+### Make Commands
+| Command | Description |
+|---------|-------------|
+| `make all` | Install all required dependencies automatically |
+| `make test` | Generate test files directory with sample media files |
+| `make clean` | Clean up generated files and directories |
+
 ## 🤖 Usage
 
 ### Basic Conversion
@@ -75,7 +97,7 @@ chmod +x mediasmith.sh
 ./mediasmith.sh image.jpg
 
 # Convert a directory recursively
-./mediasmith.sh -r /path/to/media/
+./mediasmith.sh -R /path/to/media/
 
 # Custom output directory and format
 ./mediasmith.sh -o converted/ -v webm video.mp4
@@ -85,7 +107,7 @@ chmod +x mediasmith.sh
 | Option | Description |
 |--------|-------------|
 | `-h` | Show help |
-| `-r` | Process recursively |
+| `-R` | Process recursively |
 | `-o <dir>` | Output directory |
 | `-v <ext>` | Video format (mp4, webm, avi) |
 | `-a <ext>` | Audio format (mp3, flac, wav) |
@@ -112,6 +134,9 @@ brew install fswatch
 
 # Start monitoring
 ./mediasmith.sh --watch
+
+# Run the script in background as Daemon
+./mediasmith.sh --watch --daemon
 ```
 
 ### How it Works
@@ -183,12 +208,22 @@ Choose the execution mode that fits your needs:
 # Run comprehensive tests
 ./scripts/automated_tests.sh
 
+# Generate test files for development
+make test
+
 # Check system compatibility
 ./scripts/system_info.sh
 
 # Performance benchmarking
 ./scripts/benchmark.sh
 ```
+
+### Test File Generation
+The `make test` command executes `populate_test_files.sh` which creates a directory containing:
+- Sample images (JPG, PNG, WebP)
+- Sample videos (MP4, AVI)
+- Sample audio files (MP3, WAV)
+- Various file sizes for performance testing
 
 ### Test Results
 ✅ **All execution modes tested and working**  
@@ -202,6 +237,7 @@ Choose the execution mode that fits your needs:
 ```
 mediasmith/
 ├── mediasmith.sh           # Main script
+├── Makefile                # Build and setup automation
 ├── lib/                    # Core modules
 │   ├── conversion.sh       # Conversion logic
 │   ├── logging.sh          # Logging system
@@ -211,6 +247,7 @@ mediasmith/
 │   ├── system_info.sh      # System diagnostics
 │   ├── automated_tests.sh  # Test suite
 │   ├── benchmark.sh        # Performance tests
+│   ├── populate_test_files.sh # Test file generator
 │   └── setup.sh            # Setup script
 ├── config/                 # Configuration
 ├── files/                  # Input directory (watched)

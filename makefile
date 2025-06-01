@@ -1,18 +1,17 @@
-# Makefile for the mediasmith project
-# Compiles the C language components.
+# Makefile pour le projet mediasmith
 
-# Compiler and flags
+# Compilateur et options
 CC = gcc
-# Use -pthread for POSIX threads and -Wall for all warnings.
+# Utiliser -pthread pour les threads POSIX et -Wall pour tous les avertissements.
 CFLAGS = -pthread -Wall -Wextra
 
-# Source and binary paths
+# Chemins des sources et binaires
 SRC = src/thread_converter.c
 BIN = bin/thread_converter
 
 .PHONY: all scripts-perm deps build test clean
 
-# Default target
+# Cible par défaut
 all: scripts-perm deps build
 
 # Rendre tous les scripts exécutables
@@ -24,22 +23,22 @@ deps:
 	@echo "[MAKE] Vérification et installation des dépendances..."
 	scripts/deps_check.sh
 
-# Rule to build the binary
+# Règle pour construire le binaire
 build: $(BIN)
 
 $(BIN): $(SRC)
-	@echo "Compiling threaded C helper..."
+	@echo "Compilation de l'assistant C multithread..."
 	@mkdir -p bin
 	$(CC) $(CFLAGS) -o $(BIN) $(SRC)
-	@echo "Compilation successful. Binary is at $(BIN)"
+	@echo "Compilation réussie. Le binaire est à $(BIN)"
 
 # Générer les fichiers de test
 test: scripts-perm
 	@echo "[MAKE] Création des fichiers de test..."
 	scripts/populate_test_files.sh
 
-# Rule to clean up build artifacts
+# Règle pour nettoyer les artefacts de construction
 clean:
-	@echo "Cleaning up build artifacts..."
+	@echo "Nettoyage des artefacts de construction..."
 	@rm -f $(BIN)
 	@rm -rf test_files output

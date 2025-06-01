@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# convertisseur_multimedia.sh - Conversion audio, vidéo et images
+# conversion.sh - Script de conversion multimédia
 
 set -euo pipefail
 
-# Chargement du module de journalisation 
+# Chargement du module de journalisation et config
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Chargement du module de journalisation et config
 source "$PROJECT_ROOT/config/config.cfg"
 source "$PROJECT_ROOT/lib/logging.sh"
 source "$PROJECT_ROOT/lib/utils.sh"
 
-# Only initialize logging if not already initialized
+# initialize logging si ce n'est pas déjà fait
 if [[ -z "${LOGGING_INITIALIZED:-}" ]]; then
     init_logging > /dev/null 2>&1
     export LOGGING_INITIALIZED=1
@@ -59,11 +58,11 @@ show_progress() {
       fi
     done
     
-    # Si on a un fichier source, essayer d'obtenir sa durée
+    # Si fichier source, essayer d'obtenir sa durée
     if [[ -n "$source_file" && -f "$source_file" ]]; then
       # Obtenir la durée en secondes
       duration_seconds=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$source_file" 2>/dev/null)
-      duration_seconds=${duration_seconds%.*} # Enlever la partie décimale
+      duration_seconds=${duration_seconds%.*}
       # Si la durée est vide ou 0, utiliser une valeur par défaut
       if [[ -z "$duration_seconds" || "$duration_seconds" == "0" ]]; then
         duration_seconds=0
@@ -102,7 +101,6 @@ show_progress() {
   { "${cmd[@]}" > "$pipe_file" 2>"$temp_file"; echo $? > "$temp_file.status"; } &
   local main_pid=$!
   
-  # Lire depuis le pipe dans un background pour traiter la sortie
   {
     local current_time=0
     local percent=0
@@ -145,11 +143,9 @@ show_progress() {
         last_percent=${progress_line#PROGRESS:}
       fi
     elif [[ $is_ffmpeg -eq 0 ]]; then
-      # Pour les commandes non-ffmpeg, utiliser une animation simple
       last_percent=$(( (i * 5) % 100 ))
     fi
     
-    # Calculer combien de caractères de la barre remplir
     local filled_width=$(( (last_percent * width) / 100 ))
     if [[ $filled_width -gt $width ]]; then
       filled_width=$width
@@ -296,7 +292,7 @@ convert_file() {
       ;;
   esac
 
-  # Afficher barre de progression personnalisée
+  # Afficher barre de progression
   if ! show_progress "${cmd[@]}"; then
     return 1
   fi
@@ -374,7 +370,7 @@ EOF
 # Parse options
 #######################################
 parse_options() {
-  #parse -h and -R because they come before the source
+
   while [[ ${1-} == -* ]]; do
     case "$1" in
         -R)
@@ -403,7 +399,6 @@ parse_options() {
     shift
   fi
 
-  # if there is more options to parse
   if [[ "$#" -gt 0 ]]; then
     while getopts ":o:v:a:i:" opt; do
       case "$opt" in
@@ -511,7 +506,6 @@ convert_main() {
   parse_options "$@"
   shift $((OPTIND - 1))
 
-  # Vérifier dépendances
   check_command ffmpeg
   check_command convert
 
