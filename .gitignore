@@ -6,3 +6,5 @@ nohup.out
 config/
 !config/config.example.cfg
 bin/
+.vscode/
+.idea/
