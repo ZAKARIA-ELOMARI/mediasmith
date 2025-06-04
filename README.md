@@ -37,6 +37,8 @@
 - [📊 Testing](#-testing)
 - [🔍 Troubleshooting](#-troubleshooting)
 - [📁 Project Structure](#-project-structure)
+- [🔰 Contributing](#-contributing)
+- [🎗 License](#-license)  
 
 ---
 
@@ -413,6 +415,25 @@ mediasmith/
 └── src/                    # Source code
     └── thread_converter.c  # C source for multi-threaded converter
 ```
+
+## 🔰 Contributing
+
+1. **Fork** the repo  
+2. **Clone** your fork  
+3. Create a **feature branch**: `git checkout -b feature‑xyz`  
+4. **Commit** your changes with clear messages  
+5. **Push** and open a **PR** against `main`  
+6. **Discuss & review** until merged
+
+    
+
+<a href="https://github.com/noalibi99/SE_PROJET/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=noalibi99/SE_PROJET" />
+</a>
+
+Made with [contrib.rocks](https://contrib.rocks).
+
+---
 
 ## 🎗 License
 
