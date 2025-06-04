@@ -9,7 +9,7 @@
 ║   ██║ ╚═╝ ██║███████╗██████╔╝██║██║  ██║███████║██║ ╚═╝ ██║██║   ██║   ██║  ██║   ║
 ║   ╚═╝     ╚═╝╚══════╝╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚═╝   ╚═╝   ╚═╝  ╚═╝   ║
 ║                                                                                   ║
-║                              MediaSmith v2.2                                     ║
+║                               MediaSmith v2.2                                     ║
 ╚═══════════════════════════════════════════════════════════════════════════════════╝
 </pre>
 </div>
@@ -31,7 +31,12 @@
 - [🤖 Usage](#-usage)
 - [⚡ Real-time Monitoring](#-real-time-monitoring)
 - [🔧 Execution Modes](#-execution-modes)
+- [🔄 Remote Backup System](#-remote-backup-system)
+- [⚙️ Configuration Management](#-configuration-management)
+- [🔧 Administrative Commands](#-administrative-commands)
 - [📊 Testing](#-testing)
+- [🔍 Troubleshooting](#-troubleshooting)
+- [📁 Project Structure](#-project-structure)
 
 ---
 
@@ -55,10 +60,7 @@ make all
 # 2. Generate test files for development
 make test
 
-# 3. Test the system
-./scripts/system_info.sh
-
-# 4. Run first conversion
+# 3. Run first conversion
 ./mediasmith.sh sample_file.jpg
 ```
 
@@ -70,10 +72,7 @@ chmod +x mediasmith.sh
 # 2. Install dependencies manually
 ./scripts/deps_check.sh
 
-# 3. Test the system
-./scripts/system_info.sh
-
-# 4. Run first conversion
+# 3. Run first conversion
 ./mediasmith.sh sample_file.jpg
 ```
 
@@ -82,12 +81,15 @@ chmod +x mediasmith.sh
 - **Linux**: `inotify-tools` for real-time monitoring
 - **macOS**: `fswatch` for real-time monitoring (install via Homebrew)
 
-### Make Commands
+### Build System Commands
 | Command | Description |
 |---------|-------------|
-| `make all` | Install all required dependencies automatically |
-| `make test` | Generate test files directory with sample media files |
-| `make clean` | Clean up generated files and directories |
+| `make all` | Install dependencies and build binaries |
+| `make build` | Compile the C thread helper only |
+| `make scripts-perm` | Make all scripts executable |
+| `make deps` | Install system dependencies |
+| `make test` | Generate test files |
+| `make clean` | Clean build artifacts |
 
 ## 🤖 Usage
 
@@ -201,21 +203,127 @@ Choose the execution mode that fits your needs:
 - **Best for**: High-performance batch operations
 - **Characteristics**: Multi-threaded C helper, parallel processing
 
+### Thread Mode Performance
+- **Multi-core utilization**: Automatically detects CPU cores
+- **Parallel processing**: Up to 16 concurrent conversions
+- **Progress monitoring**: Real-time conversion statistics
+- **Optimal for**: Large batch operations (100+ files)
+
+```bash
+# High-performance batch processing
+./mediasmith.sh -t /large/media/directory/
+```
+
+## 🔄 Remote Backup System
+
+MediaSmith includes automated backup functionality with cloud storage support.
+
+### Setup Remote Backup
+```bash
+# Interactive setup for cloud backup
+./scripts/setup_remote_backup.sh
+
+# Test backup configuration
+./scripts/test_remote_backup.sh
+
+# Manual backup trigger
+./mediasmith.sh --backup
+```
+
+### Supported Storage Features
+- **rclone** integration for different cloud providers
+- **Automatic file synchronization** after conversion
+- **Backup status tracking** and logging
+- **Date-based backup organization**
+
+### Backup Configuration
+The backup system uses the following structure:
+- `backup/` - Local backup storage
+- `logs/backed_up.log` - Backup history
+- `logs/to_backup.log` - Files queued for backup
+
+### Example Backup Workflow
+```bash
+# Setup remote backup destination
+./scripts/setup_remote_backup.sh
+
+# Convert files (automatically queued for backup)
+./mediasmith.sh video.mp4
+
+# Check backup status
+cat logs/backed_up.log
+```
+
+## ⚙️ Configuration Management
+
+MediaSmith provides comprehensive configuration management through interactive and file-based settings.
+
+### Interactive Configuration
+```bash
+# Launch configuration editor
+./mediasmith.sh -c
+
+# Available configuration options:
+LOG_LEVEL="INFO"                    # Logging verbosity (DEBUG, INFO, WARN, ERROR)
+DEFAULT_OUT_DIR="out"               # Default output directory
+WATCH_INTERVAL="2"                  # Polling interval for file monitoring
+default_video_ext="mp4"             # Default video output format
+default_audio_ext="mp3"             # Default audio output format  
+default_image_ext="jpg"             # Default image output format
+REMOTE_DIR="backup_remote"          # Remote backup directory path
+```
+
+### Configuration Files
+- `config/config.cfg` - Main configuration file
+- `config/config.example.cfg` - Template with all available options
+
+### Advanced Configuration
+```bash
+# Custom configuration file
+./mediasmith.sh --config /path/to/custom.cfg
+
+# Override specific settings
+LOG_LEVEL=DEBUG ./mediasmith.sh file.jpg
+
+# Reset to defaults
+./mediasmith.sh --restore-defaults
+```
+
+## 🔧 Administrative Commands
+
+MediaSmith provides several administrative commands for system management.
+
+### System Administration
+```bash
+# Restore default configuration (requires sudo)
+sudo ./mediasmith.sh --restore
+
+# Custom log directory
+sudo ./mediasmith.sh -l /custom/log/path
+
+# Check dependencies
+./scripts/deps_check.sh
+```
+
+### Log Management
+```bash
+# View conversion history
+cat logs/converted_files.log
+
+# View backup history
+cat logs/backed_up.log
+
+# View general system history
+cat logs/history.log
+
+```
+
 ## 📊 Testing
 
 ### Quick Test
 ```bash
-# Run comprehensive tests
-./scripts/automated_tests.sh
-
 # Generate test files for development
 make test
-
-# Check system compatibility
-./scripts/system_info.sh
-
-# Performance benchmarking
-./scripts/benchmark.sh
 ```
 
 ### Test File Generation
@@ -223,13 +331,41 @@ The `make test` command executes `populate_test_files.sh` which creates a direct
 - Sample images (JPG, PNG, WebP)
 - Sample videos (MP4, AVI)
 - Sample audio files (MP3, WAV)
-- Various file sizes for performance testing
 
-### Test Results
-✅ **All execution modes tested and working**  
-✅ **Cross-platform monitoring verified**  
-✅ **Performance benchmarks completed**  
-✅ **Error handling validated**  
+## 🔍 Troubleshooting
+
+### Common Issues
+- **Thread helper not found**: Run `make build` to compile the C helper
+- **Permission denied**: Use `sudo ./mediasmith.sh --restore` to fix permissions
+- **Monitoring not working**: Install `inotify-tools` (Linux) or `fswatch` (macOS)
+- **Remote backup failing**: Run `./scripts/test_remote_backup.sh` to diagnose
+
+### Debug Mode
+```bash
+# Enable debug logging
+LOG_LEVEL=DEBUG ./mediasmith.sh file.jpg
+
+# View detailed logs
+tail -f logs/history.log
+```
+
+### Performance Issues
+```bash
+# Use thread mode for large batches
+./mediasmith.sh -t /large/directory/
+
+# Monitor conversion progress
+watch -n 1 'ls -la out/'
+```
+
+### Configuration Problems
+```bash
+# Reset to default configuration
+./mediasmith.sh --restore-defaults
+
+# Verify configuration
+./mediasmith.sh -c
+```
 
 ---
 
@@ -237,21 +373,45 @@ The `make test` command executes `populate_test_files.sh` which creates a direct
 ```
 mediasmith/
 ├── mediasmith.sh           # Main script
-├── Makefile                # Build and setup automation
+├── makefile                # Build and setup automation
+├── README.md               # Project documentation
+├── .gitignore              # Git ignore rules
+├── backup/                 # Backup storage
+│   └── 2025-06-04/         # Date-based backups
+├── bin/                    # Compiled binaries
+│   └── thread_converter    # Multi-threaded converter binary
+├── config/                 # Configuration files
+│   ├── config.cfg          # Main configuration
+│   └── config.example.cfg  # Configuration template
+├── files/                  # Input directory (watched)
+│   ├── sample1.mp4         # Test video file
+│   ├── sample2.mkv         # Test video file
+│   ├── sample3.wav         # Test audio file
+│   ├── sample4.flac        # Test audio file
+│   ├── sample5.png         # Test image file
+│   └── sample6.jpg         # Test image file
 ├── lib/                    # Core modules
+│   ├── backup.sh           # Backup functionality
 │   ├── conversion.sh       # Conversion logic
 │   ├── logging.sh          # Logging system
-│   ├── watcher.sh          # File monitoring
-│   └── utils.sh            # Utilities
+│   ├── utils.sh            # Utilities
+│   └── watcher.sh          # File monitoring
+├── logs/                   # Log files
+│   ├── backed_up.log       # Backup history
+│   ├── converted_files.log # Conversion history
+│   ├── history.log         # General history
+│   └── to_backup.log       # Files to backup
+├── out/                    # Output directory
+│   ├── audios/             # Converted audio files
+│   ├── images/             # Converted image files
+│   └── videos/             # Converted video files
 ├── scripts/                # Utility scripts
-│   ├── system_info.sh      # System diagnostics
-│   ├── automated_tests.sh  # Test suite
-│   ├── benchmark.sh        # Performance tests
+│   ├── deps_check.sh       # Dependency checker
 │   ├── populate_test_files.sh # Test file generator
-│   └── setup.sh            # Setup script
-├── config/                 # Configuration
-├── files/                  # Input directory (watched)
-└── out/                    # Output directory
+│   ├── setup_remote_backup.sh # Remote backup setup
+│   └── test_remote_backup.sh  # Backup testing
+└── src/                    # Source code
+    └── thread_converter.c  # C source for multi-threaded converter
 ```
 
 ## 🎗 License
